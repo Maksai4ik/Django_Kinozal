@@ -338,3 +338,44 @@ def pay_booking(request, pk):
             "form": form,
         },
     )
+
+@login_required
+def cashier_bookings(request):
+    if not is_staff_or_cashier(request.user):
+        messages.error(request, "Доступ к служебной странице есть только у кассиров и сотрудников.")
+        return redirect("index")
+
+    selected_session_id = request.GET.get("session", "").strip()
+    search_query = request.GET.get("q", "").strip()
+
+    bookings = (
+        Booking.objects.select_related(
+            "user", "session__movie", "session__hall", "seat", "ticket"
+        )
+        .order_by("-created_at")
+    )
+
+    if selected_session_id.isdigit():
+        bookings = bookings.filter(session_id=int(selected_session_id))
+
+    if search_query:
+        bookings = bookings.filter(
+            Q(user__username__icontains=search_query)
+            | Q(ticket__number__icontains=search_query)
+        )
+
+    sessions = (
+        Session.objects.select_related("movie", "hall")
+        .order_by("-starts_at")
+    )
+
+    return render(
+        request,
+        "cashier_bookings.html",
+        {
+            "bookings": bookings,
+            "sessions": sessions,
+            "selected_session_id": selected_session_id,
+            "search_query": search_query,
+        },
+    )
