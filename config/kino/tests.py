@@ -197,3 +197,146 @@ class TicketPaymentTests(TestCase):
         self.assertEqual(self.booking.expires_at, self.booking_expires_at)
         self.assertEqual(ticket.price, self.price.price)
         self.assertEqual(ticket.channel, Ticket.Channel.ONLINE)
+
+
+class SeatBookingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="viewer")
+        self.other_user = User.objects.create_user(username="another-viewer")
+        self.hall = Hall.objects.create(
+            name="Зал бронирования",
+            rows_count=5,
+            seats_per_row=8,
+        )
+        self.seats = [
+            Seat.objects.create(hall=self.hall, row=1, number=number)
+            for number in range(1, 6)
+        ]
+        self.movie = Movie.objects.create(
+            title="Фильм для бронирования",
+            duration_min=90,
+            year=2026,
+        )
+        self.session = Session.objects.create(
+            movie=self.movie,
+            hall=self.hall,
+            starts_at=timezone.now() + timedelta(days=1),
+        )
+        self.client.force_login(self.user)
+
+    def test_session_page_renders_multi_seat_form(self):
+        response = self.client.get(
+            reverse("session_detail", args=[self.session.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'action="{reverse("book_seats", args=[self.session.pk])}"',
+        )
+        self.assertContains(response, 'type="checkbox"', count=5)
+        self.assertContains(response, 'data-hold-minutes="15"')
+
+    def test_four_seats_are_held_in_one_submission(self):
+        response = self.client.post(
+            reverse("book_seats", args=[self.session.pk]),
+            {"seats": [seat.pk for seat in self.seats[:4]]},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("session_detail", args=[self.session.pk]),
+            fetch_redirect_response=False,
+        )
+        bookings = Booking.objects.filter(
+            user=self.user,
+            session=self.session,
+        )
+        self.assertEqual(bookings.count(), 4)
+        self.assertEqual(
+            set(bookings.values_list("seat_id", flat=True)),
+            {seat.pk for seat in self.seats[:4]},
+        )
+        self.assertEqual(
+            set(bookings.values_list("status", flat=True)),
+            {Booking.Status.HELD},
+        )
+        self.assertEqual(
+            len(set(bookings.values_list("expires_at", flat=True))),
+            1,
+        )
+
+    def test_more_than_four_seats_are_rejected(self):
+        response = self.client.post(
+            reverse("book_seats", args=[self.session.pk]),
+            {"seats": [seat.pk for seat in self.seats]},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("session_detail", args=[self.session.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(Booking.objects.filter(session=self.session).exists())
+
+    def test_conflict_does_not_partially_book_selected_seats(self):
+        Booking.objects.create(
+            user=self.other_user,
+            session=self.session,
+            seat=self.seats[1],
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+        self.client.post(
+            reverse("book_seats", args=[self.session.pk]),
+            {"seats": [self.seats[0].pk, self.seats[1].pk]},
+        )
+
+        self.assertEqual(
+            list(
+                Booking.objects.filter(session=self.session)
+                .values_list("seat_id", flat=True)
+            ),
+            [self.seats[1].pk],
+        )
+
+    def test_availability_reports_free_held_sold_and_own_seats(self):
+        now = timezone.now()
+        Booking.objects.create(
+            user=self.user,
+            session=self.session,
+            seat=self.seats[0],
+            expires_at=now + timedelta(minutes=15),
+        )
+        Booking.objects.create(
+            user=self.other_user,
+            session=self.session,
+            seat=self.seats[1],
+            expires_at=now + timedelta(minutes=15),
+        )
+        Booking.objects.create(
+            user=self.other_user,
+            session=self.session,
+            seat=self.seats[2],
+            status=Booking.Status.PAID,
+            expires_at=now + timedelta(minutes=15),
+        )
+        Booking.objects.create(
+            user=self.other_user,
+            session=self.session,
+            seat=self.seats[3],
+            created_at=now - timedelta(minutes=20),
+            expires_at=now - timedelta(minutes=5),
+        )
+
+        response = self.client.get(
+            reverse("session_seat_availability", args=[self.session.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        states = response.json()["seats"]
+        self.assertEqual(states[str(self.seats[0].pk)], "mine")
+        self.assertEqual(states[str(self.seats[1].pk)], "held")
+        self.assertEqual(states[str(self.seats[2].pk)], "sold")
+        self.assertEqual(states[str(self.seats[3].pk)], "free")
+        self.assertEqual(states[str(self.seats[4].pk)], "free")

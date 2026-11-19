@@ -7,10 +7,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
 from django.utils import timezone
+from django.views.decorators.http import require_GET
 
 from .forms import ProfileForm, RegisterForm, ReviewForm
 from .models import (
@@ -146,9 +148,32 @@ def profile(request):
     return render(request, "profile.html", {"form": form})
 
 
+def _active_seat_statuses(session, now, user_id=None):
+    statuses = {}
+    active_bookings = (
+        Booking.objects.filter(session=session)
+        .filter(
+            Q(status=Booking.Status.PAID)
+            | Q(status=Booking.Status.HELD, expires_at__gt=now)
+        )
+        .values_list("seat_id", "status", "user_id")
+    )
+    for seat_id, status, booking_user_id in active_bookings:
+        if booking_user_id == user_id and user_id is not None:
+            statuses[seat_id] = "mine"
+        elif status == Booking.Status.PAID:
+            statuses[seat_id] = "sold"
+        else:
+            statuses[seat_id] = "held"
+    return statuses
+
+
+def _can_book_session(session, now):
+    return session.status == Session.Status.ACTIVE and session.starts_at > now
+
+
 def session_detail(request, pk):
     now = timezone.now()
-
     # Берём сеанс вместе с фильмом и залом одним запросом, чтобы не делать лишних обращений к базе
     session = get_object_or_404(
         Session.objects.select_related("movie", "hall"),
@@ -164,23 +189,26 @@ def session_detail(request, pk):
         for item in session.prices.all()
     }
 
-    # Собираем номера мест, которые сейчас заняты на этом сеансе:
-    # либо бронь уже оплачена, либо бронь удерживается и время удержания ещё не вышло
-    busy_seat_ids = set(
-        Booking.objects.filter(session=session)
-        .filter(
-            Q(status=Booking.Status.PAID)
-            | Q(status=Booking.Status.HELD, expires_at__gt=now)
-        )
-        .values_list("seat_id", flat=True)
+    seat_statuses = _active_seat_statuses(
+        session,
+        now,
+        request.user.pk if request.user.is_authenticated else None,
     )
+    status_labels = {
+        "free": "Свободно",
+        "held": "Удерживается",
+        "sold": "Выкуплено",
+        "mine": "Ваша бронь",
+    }
 
     # Группируем места по рядам для удобного вывода в шаблоне
     rows_map = {}
     for seat in seats:
+        status = seat_statuses.get(seat.id, "free")
         rows_map.setdefault(seat.row, []).append({
             "seat": seat,
-            "is_busy": seat.id in busy_seat_ids,
+            "status": status,
+            "status_label": status_labels[status],
             "price": prices_by_category.get(seat.category),
         })
 
@@ -193,84 +221,144 @@ def session_detail(request, pk):
             "session": session,
             "rows": rows,
             "prices_by_category": prices_by_category,
-            "busy_seat_ids": busy_seat_ids,
+            "can_book": _can_book_session(session, now),
+            "hold_minutes": Booking.HOLD_MINUTES,
         },
     )
 
 
-@login_required
-def book_seat(request, session_id, seat_id):
-    # Изменять базу данных нужно только при отправке формы, а не при простом открытии ссылки
-    if request.method != "POST":
+@require_GET
+def session_seat_availability(request, pk):
+    now = timezone.now()
+    session = get_object_or_404(
+        Session.objects.select_related("hall"),
+        pk=pk,
+    )
+    seat_statuses = _active_seat_statuses(
+        session,
+        now,
+        request.user.pk if request.user.is_authenticated else None,
+    )
+    seats = {
+        str(seat_id): seat_statuses.get(seat_id, "free")
+        for seat_id in session.hall.seats.values_list("pk", flat=True)
+    }
+    response = JsonResponse({
+        "booking_open": _can_book_session(session, now),
+        "seats": seats,
+    })
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+def _book_selected_seats(request, session_id, seat_ids):
+    if not 1 <= len(seat_ids) <= 4 or len(set(seat_ids)) != len(seat_ids):
+        messages.error(request, "Выберите от 1 до 4 разных мест.")
         return redirect("session_detail", pk=session_id)
 
     now = timezone.now()
 
-    # Открываем транзакцию: проверка и создание брони идут как единое целое
     with transaction.atomic():
-        # Блокируем строку сеанса в базе, чтобы два человека не забрали место в одну секунду
         session = get_object_or_404(
             Session.objects.select_for_update().select_related("movie", "hall"),
             pk=session_id,
         )
 
-        # Проверяем, что сеанс не отменён и ещё не начался
         if session.status != Session.Status.ACTIVE:
-            messages.error(request, "Сеанс отменён, забронировать место нельзя.")
+            messages.error(request, "Сеанс отменён, забронировать места нельзя.")
             return redirect("session_detail", pk=session.pk)
 
         if session.starts_at <= now:
             messages.error(request, "Сеанс уже начался.")
             return redirect("session_detail", pk=session.pk)
 
-        # Находим место и проверяем, что оно действительно из зала этого сеанса
-        seat = get_object_or_404(Seat, pk=seat_id, hall=session.hall)
+        seats = list(
+            Seat.objects.filter(pk__in=seat_ids, hall=session.hall)
+            .order_by("row", "number")
+        )
+        if len(seats) != len(seat_ids):
+            messages.error(request, "Выбраны недопустимые места.")
+            return redirect("session_detail", pk=session.pk)
 
-        # Помечаем истёкшими старые удержания, у которых время удержания уже вышло
         Booking.objects.filter(
             session=session,
-            seat=seat,
+            seat_id__in=seat_ids,
             status=Booking.Status.HELD,
             expires_at__lte=now,
         ).update(status=Booking.Status.EXPIRED)
 
-        # Проверяем, не занято ли место сейчас (уже выкуплено или ещё удерживается)
-        already_taken = (
-            Booking.objects.filter(session=session, seat=seat)
+        already_taken = set(
+            Booking.objects.filter(session=session, seat_id__in=seat_ids)
             .filter(
                 Q(status=Booking.Status.PAID)
                 | Q(status=Booking.Status.HELD, expires_at__gt=now)
             )
-            .exists()
+            .values_list("seat_id", flat=True)
         )
-
         if already_taken:
-            messages.error(request, "Это место уже занято.")
-            return redirect("session_detail", pk=session.pk)
-
-        # Вычисляем момент окончания удержания: сейчас + заданное число минут удержания
-        expires_at = now + timedelta(minutes=Booking.HOLD_MINUTES)
-
-        try:
-            # Записываем новую бронь в таблицу броней
-            Booking.objects.create(
-                user=request.user,
-                session=session,
-                seat=seat,
-                created_at=now,
-                expires_at=expires_at,
-                status=Booking.Status.HELD,
+            messages.error(
+                request,
+                "Одно или несколько мест только что заняли. Обновите схему и выберите другие.",
             )
-        except IntegrityError:
-            # Перехватываем срабатывание ограничения уникальности в самой базе данных
-            messages.error(request, "Место только что забронировал кто-то другой.")
             return redirect("session_detail", pk=session.pk)
 
+        expires_at = now + timedelta(minutes=Booking.HOLD_MINUTES)
+        try:
+            with transaction.atomic():
+                Booking.objects.bulk_create([
+                    Booking(
+                        user=request.user,
+                        session=session,
+                        seat=seat,
+                        created_at=now,
+                        expires_at=expires_at,
+                        status=Booking.Status.HELD,
+                    )
+                    for seat in seats
+                ])
+        except IntegrityError:
+            messages.error(
+                request,
+                "Одно или несколько мест только что забронировал другой пользователь.",
+            )
+            return redirect("session_detail", pk=session.pk)
+
+    places = ", ".join(
+        f"ряд {seat.row}, место {seat.number}"
+        for seat in seats
+    )
     messages.success(
         request,
-        f"Место (ряд {seat.row}, место {seat.number}) забронировано на {Booking.HOLD_MINUTES} мин.",
+        f"Места ({places}) забронированы на {Booking.HOLD_MINUTES} мин.",
     )
     return redirect("session_detail", pk=session.pk)
+
+
+@login_required
+def book_seats(request, session_id):
+    if request.method != "POST":
+        return redirect("session_detail", pk=session_id)
+
+    raw_seat_ids = request.POST.getlist("seats")
+    if not 1 <= len(raw_seat_ids) <= 4:
+        messages.error(request, "Выберите от 1 до 4 мест.")
+        return redirect("session_detail", pk=session_id)
+
+    try:
+        seat_ids = [int(value) for value in raw_seat_ids]
+    except ValueError:
+        messages.error(request, "Выбраны недопустимые места.")
+        return redirect("session_detail", pk=session_id)
+
+    return _book_selected_seats(request, session_id, seat_ids)
+
+
+@login_required
+def book_seat(request, session_id, seat_id):
+    if request.method != "POST":
+        return redirect("session_detail", pk=session_id)
+
+    return _book_selected_seats(request, session_id, [seat_id])
 
 
 @login_required

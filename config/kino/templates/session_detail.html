@@ -3,44 +3,246 @@
 {% block title %}Сеанс — {{ session.movie.title }}{% endblock %}
 
 {% block content %}
-    <p><a href="{% url 'index' %}">← Назад к афише</a></p>
+<p class="crumbs"><a href="{% url 'index' %}">← Назад к афише</a></p>
+<h1>{{ session.movie.title }}</h1>
+<p><strong>Начало:</strong> {{ session.starts_at|date:"d.m.Y H:i" }}</p>
 
-    <h1>{{ session.movie.title }}</h1>
-    <p><strong>Зал:</strong> {{ session.hall.name }}</p>
-    <p><strong>Начало:</strong> {{ session.starts_at|date:"d.m.Y H:i" }}</p>
+<section class="session">
+  <div>
+    <p class="swipe">Схему зала можно прокручивать по горизонтали.</p>
+    <div
+      class="hallbox"
+      id="seat-map"
+      data-hold-minutes="{{ hold_minutes }}"
+      data-booking-open="{{ can_book|yesno:'true,false' }}"
+    >
+      <div class="hallname">{{ session.hall.name }}</div>
+      <div class="screen" aria-hidden="true"></div>
+      <div class="screen-t">ЭКРАН</div>
 
-    {% if prices_by_category %}
-        <p>
-            <strong>Цены:</strong>
-            {% for cat, price in prices_by_category.items %}
-                {{ cat }} — {{ price }} ₽{% if not forloop.last %}, {% endif %}
+      {% if rows %}
+        {% if user.is_authenticated %}
+        <form id="seat-form" method="post" action="{% url 'book_seats' session.id %}">
+          {% csrf_token %}
+        {% endif %}
+          {% for row_num, seats_in_row in rows %}
+          <div class="seatrow" aria-label="Ряд {{ row_num }}">
+            <span class="n" aria-hidden="true">{{ row_num }}</span>
+            {% for item in seats_in_row %}
+            <label
+              class="seat{% if item.seat.category == 'vip' %} vip{% endif %} {{ item.status }}"
+              data-seat-id="{{ item.seat.id }}"
+              data-seat-label="Ряд {{ row_num }}, место {{ item.seat.number }}"
+              data-category="{{ item.seat.get_category_display }}"
+              data-state="{{ item.status }}"
+              title="{{ item.status_label }} — {{ item.seat.get_category_display }}"
+            >
+              {% if user.is_authenticated %}
+              <input
+                type="checkbox"
+                name="seats"
+                value="{{ item.seat.id }}"
+                aria-label="Ряд {{ row_num }}, место {{ item.seat.number }} — {{ item.seat.get_category_display }}: {{ item.status_label }}"
+                {% if item.status != 'free' or not can_book %}disabled{% endif %}
+              >
+              {% endif %}
+              <span aria-hidden="true">{{ item.seat.number }}</span>
+            </label>
             {% endfor %}
-        </p>
-    {% endif %}
+          </div>
+          {% endfor %}
 
-    <h2>Схема зала</h2>
-    {% if rows %}
-        {% for row_num, seats_in_row in rows %}
-            <div style="margin-bottom: 8px;">
-                <strong>Ряд {{ row_num }}:</strong>
-                {% for item in seats_in_row %}
-                    {% if item.is_busy %}
-                        <button type="button" disabled title="Место занято">
-                            {{ item.seat.number }} (занято)
-                        </button>
-                    {% else %}
-                        <!-- Отправляем запрос на бронь этого места на этом сеансе -->
-                        <form method="post" action="{% url 'book_seat' session.id item.seat.id %}" style="display:inline;">
-                        {% csrf_token %}->
-                        <button type="submit">
-                            {{ item.seat.number }} ({{ item.seat.get_category_display }})
-                        </button>
-                         </form>
-                    {% endif %}
-                {% endfor %}
-            </div>
-        {% endfor %}
-    {% else %}
+        {% if user.is_authenticated %}
+          <p id="selection-status" class="hall-status" aria-live="polite">
+            Выберите до 4 свободных мест. Бронь удерживается {{ hold_minutes }} минут.
+          </p>
+          <ul id="selected-list" aria-label="Выбранные места"></ul>
+          <p id="hall-message" class="hall-message" aria-live="polite"></p>
+          <button class="btn btn-primary" id="book-selected" type="submit" disabled>
+            Забронировать выбранные (0/4)
+          </button>
+        </form>
+        {% else %}
+          <p class="hall-status">
+            Чтобы забронировать места, <a href="{% url 'login' %}">войдите в аккаунт</a>.
+          </p>
+        {% endif %}
+      {% else %}
         <p>Для этого зала ещё не добавлены места.</p>
+      {% endif %}
+
+      <div class="legend" aria-label="Обозначения мест">
+        <span><i></i> Свободно</span>
+        <span><i class="l-sel"></i> Выбрано</span>
+        <span><i class="l-held"></i> Удерживается</span>
+        <span><i class="l-sold"></i> Выкуплено</span>
+        <span><i class="l-mine"></i> Ваша бронь</span>
+        <span><i class="l-vip"></i> VIP</span>
+      </div>
+      <p id="availability-status" class="hall-status" role="status">
+        Схема обновляется каждые 5 секунд.
+      </p>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <div class="film-mini">
+      {% if session.movie.poster %}
+      <img src="{{ session.movie.poster.url }}" alt="Постер фильма «{{ session.movie.title }}»">
+      {% endif %}
+      <div>
+        <strong>{{ session.movie.title }}</strong>
+        <p class="small">{{ session.hall.name }}</p>
+      </div>
+    </div>
+    <h2>Информация о сеансе</h2>
+    <dl class="kv">
+      <dt>Дата и время</dt>
+      <dd>{{ session.starts_at|date:"d.m.Y H:i" }}</dd>
+      <dt>Зал</dt>
+      <dd>{{ session.hall.name }}</dd>
+    </dl>
+    {% if prices_by_category %}
+    <h3>Цены</h3>
+    {% for category, price in prices_by_category.items %}
+      <div class="line"><span>{{ category }}</span><strong>{{ price }} ₽</strong></div>
+    {% endfor %}
     {% endif %}
+  </aside>
+</section>
+
+<script>
+(() => {
+  const availabilityUrl = "{% url 'session_seat_availability' session.id %}";
+  const form = document.getElementById("seat-form");
+  const seats = document.querySelectorAll("#seat-map [data-seat-id]");
+  const availabilityStatus = document.getElementById("availability-status");
+  const selectionStatus = document.getElementById("selection-status");
+  const hallMessage = document.getElementById("hall-message");
+  const selectedList = document.getElementById("selected-list");
+  const submitButton = document.getElementById("book-selected");
+  const holdMinutes = Number(document.getElementById("seat-map").dataset.holdMinutes);
+  let bookingOpen = document.getElementById("seat-map").dataset.bookingOpen === "true";
+  let refreshing = false;
+  const statusLabels = {
+    free: "Свободно",
+    held: "Удерживается",
+    sold: "Выкуплено",
+    mine: "Ваша бронь"
+  };
+
+  function selectedInputs() {
+    return form ? Array.from(form.querySelectorAll('input[name="seats"]:checked')) : [];
+  }
+
+  function renderSelection() {
+    if (!form) {
+      return;
+    }
+
+    const inputs = form.querySelectorAll('input[name="seats"]');
+    if (!bookingOpen) {
+      inputs.forEach((input) => {
+        input.checked = false;
+      });
+    }
+    const selected = selectedInputs();
+    const count = selected.length;
+
+    inputs.forEach((input) => {
+      const seat = input.closest(".seat");
+      const state = seat.dataset.state;
+      input.disabled = !bookingOpen || state !== "free" || (count >= 4 && !input.checked);
+      seat.classList.toggle("sel", input.checked);
+    });
+
+    selectedList.textContent = "";
+    selected.forEach((input) => {
+      const item = document.createElement("li");
+      item.textContent = input.closest(".seat").dataset.seatLabel;
+      selectedList.appendChild(item);
+    });
+
+    submitButton.disabled = !bookingOpen || count < 1;
+    submitButton.textContent = `Забронировать выбранные (${count}/4)`;
+    selectionStatus.textContent = bookingOpen
+      ? `Выбрано мест: ${count} из 4. Бронь удерживается ${holdMinutes} минут.`
+      : "Бронирование этого сеанса закрыто.";
+  }
+
+  function applySeatState(element, state) {
+    if (!Object.prototype.hasOwnProperty.call(statusLabels, state)) {
+      state = "free";
+    }
+    const input = element.querySelector("input");
+    if (input && state !== "free") {
+      input.checked = false;
+    }
+
+    element.dataset.state = state;
+    element.classList.remove("free", "held", "sold", "mine", "sel");
+    element.classList.add(state);
+    element.title = `${statusLabels[state]} — ${element.dataset.category}`;
+    if (input) {
+      input.setAttribute(
+        "aria-label",
+        `${element.dataset.seatLabel} — ${element.dataset.category}: ${statusLabels[state]}`
+      );
+    }
+  }
+
+  async function refreshAvailability() {
+    if (refreshing) {
+      return;
+    }
+    refreshing = true;
+    try {
+      const response = await fetch(availabilityUrl, {
+        headers: { "Accept": "application/json" },
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        throw new Error(`Ошибка обновления схемы: ${response.status}`);
+      }
+
+      const data = await response.json();
+      bookingOpen = data.booking_open;
+      seats.forEach((element) => {
+        applySeatState(element, data.seats[element.dataset.seatId] || "free");
+      });
+      renderSelection();
+      if (hallMessage) {
+        hallMessage.textContent = "";
+      }
+      availabilityStatus.textContent = "Схема обновлена. Следующее обновление — через 5 секунд.";
+    } catch (error) {
+      availabilityStatus.textContent = "Не удалось обновить схему. Проверьте соединение.";
+      console.error(error);
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  if (form) {
+    form.addEventListener("change", (event) => {
+      if (event.target.name === "seats") {
+        hallMessage.textContent = "";
+        renderSelection();
+      }
+    });
+
+    form.addEventListener("submit", (event) => {
+      const count = selectedInputs().length;
+      if (count < 1 || count > 4 || !bookingOpen) {
+        event.preventDefault();
+        hallMessage.textContent = "Выберите от 1 до 4 свободных мест.";
+      }
+    });
+    renderSelection();
+  }
+
+  refreshAvailability();
+  window.setInterval(refreshAvailability, 5000);
+})();
+</script>
 {% endblock %}
