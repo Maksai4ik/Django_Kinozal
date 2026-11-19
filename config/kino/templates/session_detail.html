@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Сеанс — {{ session.movie.title }}{% endblock %}
+
+{% block content %}
+    <p><a href="{% url 'index' %}">← Назад к афише</a></p>
+
+    <h1>{{ session.movie.title }}</h1>
+    <p><strong>Зал:</strong> {{ session.hall.name }}</p>
+    <p><strong>Начало:</strong> {{ session.starts_at|date:"d.m.Y H:i" }}</p>
+
+    {% if prices_by_category %}
+        <p>
+            <strong>Цены:</strong>
+            {% for cat, price in prices_by_category.items %}
+                {{ cat }} — {{ price }} ₽{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+    {% endif %}
+
+    <h2>Схема зала</h2>
+    {% if rows %}
+        {% for row_num, seats_in_row in rows %}
+            <div style="margin-bottom: 8px;">
+                <strong>Ряд {{ row_num }}:</strong>
+                {% for item in seats_in_row %}
+                    {% if item.is_busy %}
+                        <button type="button" disabled title="Место занято">
+                            {{ item.seat.number }} (занято)
+                        </button>
+                    {% else %}
+                        <!-- Отправляем запрос на бронь этого места на этом сеансе -->
+    <form method="post" action="{% url 'book_seat' session.id item.seat.id %}" style="display:inline;">
+        <!-- Защита от подделки запросов — обязательна для отправки форм -->
+        {% csrf_token %}
+        <!-- Обычная кнопка отправки формы -->
+        <button type="submit">
+            {{ item.seat.number }} ({{ item.seat.get_category_display }})
+        </button>
+    </form>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>Для этого зала ещё не добавлены места.</p>
+    {% endif %}
+{% endblock %}
