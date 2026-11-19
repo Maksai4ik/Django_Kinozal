@@ -12,6 +12,11 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("register/", views.register, name="register"),
     path("profile/", views.profile, name="profile"),
+    path(
+        "profile/password/",
+        views.AccountPasswordChangeView.as_view(),
+        name="password_change",
+    ),
     path("sessions/<int:pk>/", views.session_detail, name="session_detail"),
     path("sessions/<int:pk>/seats/availability/", views.session_seat_availability, name="session_seat_availability"),
     path("sessions/<int:session_id>/seats/book/", views.book_seats, name="book_seats"),

@@ -23,6 +23,7 @@ class RegisterFormTests(SimpleTestCase):
     def test_registration_fields_are_russian_without_help_text(self):
         form = RegisterForm()
 
+        self.assertTrue(form.fields["email"].required)
         self.assertEqual(form.fields["password1"].label, "Пароль")
         self.assertEqual(
             form.fields["password2"].label,
@@ -30,6 +31,85 @@ class RegisterFormTests(SimpleTestCase):
         )
         for field_name in ("username", "password1", "password2"):
             self.assertEqual(form.fields[field_name].help_text, "")
+
+
+class AccountTests(TestCase):
+    def test_registration_requires_and_saves_email(self):
+        registration = {
+            "username": "new_viewer",
+            "password1": "StrongTestPassword123!",
+            "password2": "StrongTestPassword123!",
+        }
+        response = self.client.post(reverse("register"), registration)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="new_viewer").exists())
+
+        registration["email"] = "viewer@example.com"
+        response = self.client.post(reverse("register"), registration)
+
+        self.assertRedirects(response, reverse("index"))
+        user = User.objects.get(username="new_viewer")
+        self.assertEqual(user.email, "viewer@example.com")
+
+    def test_password_change_requires_old_password_and_keeps_user_signed_in(self):
+        old_password = "StrongTestPassword123!"
+        new_password = "AnotherStrongPassword456!"
+        user = User.objects.create_user(
+            username="password_viewer",
+            email="viewer@example.com",
+            password=old_password,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("password_change"),
+            {
+                "old_password": "incorrect",
+                "new_password1": new_password,
+                "new_password2": new_password,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("old_password", response.context["form"].errors)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password(old_password))
+
+        response = self.client.post(
+            reverse("password_change"),
+            {
+                "old_password": old_password,
+                "new_password1": new_password,
+                "new_password2": new_password,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        user.refresh_from_db()
+        self.assertTrue(user.check_password(new_password))
+        self.assertEqual(self.client.get(reverse("profile")).status_code, 200)
+
+    def test_profile_cannot_clear_required_email(self):
+        user = User.objects.create_user(
+            username="profile_viewer",
+            email="viewer@example.com",
+            password="StrongTestPassword123!",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "username": user.username,
+                "first_name": "",
+                "last_name": "",
+                "email": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("email", response.context["form"].errors)
+        user.refresh_from_db()
+        self.assertEqual(user.email, "viewer@example.com")
 
 
 class LoginRedirectTests(TestCase):

@@ -16,6 +16,7 @@
       {% for item in nav_items %}<a href="{{ item.url }}"{% if item.active %} class="active" aria-current="page"{% endif %}>{{ item.title }}</a>{% endfor %}
       <div class="nav-extra">
         {% if user.is_authenticated %}
+        <a href="{% url 'profile' %}">Мой профиль</a>
         <a href="{% url 'my_bookings' %}">Мои брони</a>
         <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="linkbtn" type="submit">Выйти ({{ user.get_username }})</button></form>
         {% else %}
@@ -26,6 +27,7 @@
     </nav>
     <div class="user">
       {% if user.is_authenticated %}
+      <a href="{% url 'profile' %}">Профиль</a>
       <a href="{% url 'my_bookings' %}">Мои брони</a>
       <b>{{ user.get_username }}</b>
       <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="linkbtn" type="submit">Выйти</button></form>

@@ -4,18 +4,23 @@ import uuid
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from .forms import ProfileForm, RegisterForm, ReviewForm
+from .forms import (
+    AccountPasswordChangeForm,
+    ProfileForm,
+    RegisterForm,
+    ReviewForm,
+)
 from .models import (
     Booking,
     Genre,
@@ -38,6 +43,16 @@ class StaffLoginView(LoginView):
         if self.request.user.is_staff:
             return reverse("admin:index")
         return super().get_success_url()
+
+
+class AccountPasswordChangeView(PasswordChangeView):
+    form_class = AccountPasswordChangeForm
+    template_name = "password_change.html"
+    success_url = reverse_lazy("profile")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Пароль успешно изменён.")
+        return super().form_valid(form)
 
 
 def index(request):

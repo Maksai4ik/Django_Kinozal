@@ -3,10 +3,15 @@
 {% block title %}Профиль{% endblock %}
 
 {% block content %}
+<div class="authbg">
+  <div class="authcard">
     <h1>Мой профиль</h1>
     <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Сохранить</button>
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="btn btn-primary btn-block" type="submit">Сохранить профиль</button>
     </form>
+    <p class="mt-16"><a href="{% url 'password_change' %}">Сменить пароль</a></p>
+  </div>
+</div>
 {% endblock %}
