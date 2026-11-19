@@ -26,6 +26,8 @@ urlpatterns = [
     path("bookings/<int:pk>/pay/", views.pay_booking, name="pay_booking"),
     path("tickets/<int:pk>/", views.ticket_detail, name="ticket_detail"),
     path("movies/<int:pk>/", views.movie_detail, name="movie_detail"),
+    path("reviews/<int:pk>/edit/", views.review_edit, name="review_edit"),
+    path("reviews/<int:pk>/delete/", views.review_delete, name="review_delete"),
     path("cashier/bookings/", views.cashier_bookings, name="cashier_bookings"),
 ]
 

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Редактирование отзыва{% endblock %}
+{% block content %}
+<section class="card form-wide">
+  <p class="crumbs"><a href="{% url 'movie_detail' movie.pk %}#reviews">← Назад к фильму</a></p>
+  <h1>Редактирование отзыва</h1>
+  <p class="small">{{ movie.title }}</p>
+  <form method="post" class="movie-review-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Сохранить</button>
+      <a class="btn btn-secondary" href="{% url 'movie_detail' movie.pk %}#reviews">Отмена</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

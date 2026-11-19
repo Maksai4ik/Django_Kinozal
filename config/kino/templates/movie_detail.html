@@ -91,12 +91,17 @@
       <div class="movie-review-layout">
         <div class="movie-review-form-card">
           {% if user.is_authenticated %}
-          <h3>Поделитесь впечатлением</h3>
-          <form method="post" class="movie-review-form">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button class="btn btn-primary" type="submit">Оставить отзыв</button>
-          </form>
+            {% if user_review %}
+            <h3>Ваш отзыв опубликован</h3>
+            <p>Вы можете изменить или удалить свой отзыв в списке.</p>
+            {% else %}
+            <h3>Поделитесь впечатлением</h3>
+            <form method="post" class="movie-review-form">
+              {% csrf_token %}
+              {{ form.as_p }}
+              <button class="btn btn-primary" type="submit">Оставить отзыв</button>
+            </form>
+            {% endif %}
           {% else %}
           <h3>Смотрели этот фильм?</h3>
           <p>Войдите, чтобы поделиться впечатлением.</p>
@@ -115,6 +120,15 @@
             </div>
             <time datetime="{{ review.created_at|date:'c' }}">{{ review.created_at|date:"d.m.Y" }}</time>
             <p>{{ review.text }}</p>
+            {% if user.is_authenticated and review.user_id == user.id %}
+            <div class="movie-review-actions">
+              <a class="btn btn-secondary" href="{% url 'review_edit' review.pk %}">Изменить отзыв</a>
+              <form method="post" action="{% url 'review_delete' review.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-danger" type="submit">Удалить</button>
+              </form>
+            </div>
+            {% endif %}
           </article>
           {% empty %}
           <div class="movie-detail-empty">Отзывов пока нет. Будьте первым зрителем, кто поделится мнением.</div>

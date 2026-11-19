@@ -392,5 +392,8 @@ fieldset.field{border:none;padding:0;margin:0 0 16px}
 .movie-review-stars{color:#f5bb48;font-size:13px;font-weight:600}
 .movie-review-card time{color:var(--muted);font-size:11px}
 .movie-review-card p{margin:12px 0 0;color:#d4dce3;line-height:1.65}
+.movie-review-actions{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.movie-review-actions form{margin:0}
+.movie-review-actions .btn{min-height:38px;padding:6px 12px;font-size:12px}
 @media(max-width:767px){.movie-body .header .container{padding:0 16px}.movie-detail-hero{padding:90px 16px 28px}.movie-detail-feature{grid-template-columns:145px minmax(0,1fr);gap:20px;min-height:220px}.movie-detail-content{padding:26px 16px 0}.movie-session-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.movie-review-layout{grid-template-columns:1fr}}
 @media(max-width:520px){.movie-detail-feature{grid-template-columns:1fr}.movie-detail-poster{width:150px}.movie-detail-info h1{font-size:40px}.movie-detail-section-heading{align-items:flex-start}.movie-session-card{min-height:120px;padding:13px}}

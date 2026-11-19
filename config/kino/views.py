@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.dateparse import parse_date
 from django.utils import timezone
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from .forms import (
     AccountPasswordChangeForm,
@@ -595,6 +595,11 @@ def movie_detail(request, pk):
         .select_related("user")
         .order_by("-created_at")
     )
+    user_review = (
+        reviews.filter(user=request.user).first()
+        if request.user.is_authenticated
+        else None
+    )
 
     # Средняя оценка фильма по всем отзывам (вернёт словарь, например {'avg_rating': 4.5} или None)
     avg_rating = reviews.aggregate(avg_rating=Avg("rating"))["avg_rating"]
@@ -604,6 +609,10 @@ def movie_detail(request, pk):
             messages.error(request, "Чтобы оставить отзыв, войдите в аккаунт.")
             return redirect("login")
 
+        if user_review:
+            messages.info(request, "Вы уже оставили отзыв. Его можно изменить ниже.")
+            return redirect(f"{reverse('movie_detail', args=[movie.pk])}#reviews")
+
         form = ReviewForm(request.POST)
         if form.is_valid():
             # Сначала создаём объект отзыва в памяти, чтобы подставить автора и фильм
@@ -612,7 +621,7 @@ def movie_detail(request, pk):
             review.movie = movie
             review.save()
             messages.success(request, "Спасибо! Ваш отзыв добавлен.")
-            return redirect("movie_detail", pk=movie.pk)
+            return redirect(f"{reverse('movie_detail', args=[movie.pk])}#reviews")
     else:
         form = ReviewForm()
 
@@ -623,10 +632,50 @@ def movie_detail(request, pk):
             "movie": movie,
             "upcoming_sessions": upcoming_sessions,
             "reviews": reviews,
+            "user_review": user_review,
             "avg_rating": avg_rating,
             "form": form,
         },
     )
+
+
+@login_required
+def review_edit(request, pk):
+    review = get_object_or_404(
+        Review.objects.select_related("movie"),
+        pk=pk,
+        user=request.user,
+    )
+    if request.method == "POST":
+        form = ReviewForm(request.POST, instance=review)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Отзыв обновлён.")
+            return redirect(
+                f"{reverse('movie_detail', args=[review.movie_id])}#reviews"
+            )
+    else:
+        form = ReviewForm(instance=review)
+
+    return render(
+        request,
+        "review_form.html",
+        {
+            "form": form,
+            "movie": review.movie,
+        },
+    )
+
+
+@login_required
+@require_POST
+def review_delete(request, pk):
+    review = get_object_or_404(Review, pk=pk, user=request.user)
+    movie_id = review.movie_id
+    review.delete()
+    messages.success(request, "Отзыв удалён.")
+    return redirect(f"{reverse('movie_detail', args=[movie_id])}#reviews")
+
 
 @login_required
 def cashier_bookings(request):

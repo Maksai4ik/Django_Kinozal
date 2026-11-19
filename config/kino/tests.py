@@ -16,6 +16,7 @@ from .models import (
     Genre,
     Hall,
     Movie,
+    Review,
     Seat,
     Session,
     SessionPrice,
@@ -396,6 +397,81 @@ class HomePageTests(TestCase):
         self.assertContains(response, reverse("my_bookings"))
         self.assertNotContains(response, "Смотреть афишу")
         self.assertNotContains(response, "Афиша ↓")
+
+
+class MovieReviewTests(TestCase):
+    def setUp(self):
+        self.movie = Movie.objects.create(
+            title="Фильм для отзывов",
+            duration_min=100,
+            year=2026,
+        )
+        self.owner = User.objects.create_user(username="review_owner")
+        self.other_user = User.objects.create_user(username="another_viewer")
+        self.review = Review.objects.create(
+            user=self.owner,
+            movie=self.movie,
+            rating=3,
+            text="Первоначальный отзыв",
+        )
+
+    def test_owner_can_edit_review(self):
+        self.client.force_login(self.owner)
+        edit_url = reverse("review_edit", args=[self.review.pk])
+
+        response = self.client.get(edit_url)
+        self.assertContains(response, self.review.text)
+
+        response = self.client.post(
+            edit_url,
+            {"rating": 5, "text": "Обновлённый отзыв"},
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('movie_detail', args=[self.movie.pk])}#reviews",
+        )
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.rating, 5)
+        self.assertEqual(self.review.text, "Обновлённый отзыв")
+
+    def test_owner_can_delete_review(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.post(
+            reverse("review_delete", args=[self.review.pk]),
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('movie_detail', args=[self.movie.pk])}#reviews",
+        )
+        self.assertFalse(Review.objects.filter(pk=self.review.pk).exists())
+
+    def test_other_user_cannot_edit_or_delete_review(self):
+        self.client.force_login(self.other_user)
+
+        edit_response = self.client.get(
+            reverse("review_edit", args=[self.review.pk]),
+        )
+        delete_response = self.client.post(
+            reverse("review_delete", args=[self.review.pk]),
+        )
+
+        self.assertEqual(edit_response.status_code, 404)
+        self.assertEqual(delete_response.status_code, 404)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.text, "Первоначальный отзыв")
+
+    def test_movie_page_disables_second_review_and_shows_owner_actions(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("movie_detail", args=[self.movie.pk]))
+
+        self.assertContains(response, reverse("review_edit", args=[self.review.pk]))
+        self.assertContains(response, reverse("review_delete", args=[self.review.pk]))
+        self.assertNotContains(response, "Оставить отзыв")
+        self.assertEqual(response.context["user_review"], self.review)
 
 
 class TicketPaymentTests(TestCase):
