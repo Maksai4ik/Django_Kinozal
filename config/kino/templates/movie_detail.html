@@ -1,62 +1,119 @@
-{% extends 'base.html' %}
-
+{% extends "base.html" %}
+{% block body_class %}movie-body{% endblock %}
+{% block main_class %}movie-main{% endblock %}
+{% block main_container_class %}movie-container{% endblock %}
 {% block title %}{{ movie.title }}{% endblock %}
-
 {% block content %}
-    <p><a href="{% url 'index' %}">← Назад к афише</a></p>
+<div class="movie-detail-page">
+  <section class="movie-detail-hero"{% if movie.backdrop %} style="--movie-backdrop: url('{{ movie.backdrop.url }}')"{% endif %}>
+    <div class="movie-detail-hero__inner">
+      <a class="movie-detail-back" href="{% url 'index' %}">← <span>Назад к афише</span></a>
+      <div class="movie-detail-feature">
+        <div class="movie-detail-poster{% if not movie.poster %} movie-detail-poster--placeholder{% endif %}">
+          {% if movie.poster %}
+          <img src="{{ movie.poster.url }}" alt="Постер фильма «{{ movie.title }}»">
+          {% else %}
+          <span>{{ movie.title }}</span>
+          <small>{{ movie.year }}</small>
+          {% endif %}
+          <span class="movie-detail-age">{{ movie.age_limit }}+</span>
+        </div>
+        <div class="movie-detail-info">
+          <p class="movie-detail-kicker">ФИЛЬМ · {{ movie.year }}</p>
+          <h1>{{ movie.title }}</h1>
+          <div class="movie-detail-meta">
+            <span>{{ movie.age_limit }}+</span>
+            <span>{% for genre in movie.genres.all %}{{ genre.name }}{% if not forloop.last %} · {% endif %}{% empty %}Без жанра{% endfor %}</span>
+            <span>{{ movie.duration_text }}</span>
+          </div>
+          <div class="movie-detail-rating">
+            <span aria-hidden="true">★</span>
+            {% if avg_rating %}
+            <strong>{{ avg_rating|floatformat:1 }}</strong><span>средняя оценка</span>
+            {% else %}
+            <strong>—</strong><span>пока без оценок</span>
+            {% endif %}
+          </div>
+          {% if movie.description %}
+          <p class="movie-detail-description">{{ movie.description }}</p>
+          {% endif %}
+          {% if upcoming_sessions %}
+          <a class="btn btn-primary" href="{% url 'session_detail' upcoming_sessions.0.pk %}">Выбрать сеанс</a>
+          {% else %}
+          <span class="movie-detail-unavailable">Ближайших сеансов пока нет</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <h1>{{ movie.title }}</h1>
+  <div class="movie-detail-content">
+    <section class="movie-detail-sessions" aria-labelledby="movie-sessions-heading">
+      <div class="movie-detail-section-heading">
+        <div>
+          <p class="eyebrow">РАСПИСАНИЕ</p>
+          <h2 id="movie-sessions-heading">Ближайшие сеансы</h2>
+        </div>
+        {% if upcoming_sessions %}<span class="movie-detail-count">{{ upcoming_sessions|length }} сеанса</span>{% endif %}
+      </div>
+      {% if upcoming_sessions %}
+      <div class="movie-session-grid">
+        {% for session in upcoming_sessions %}
+        <a class="movie-session-card" href="{% url 'session_detail' session.pk %}">
+          <span class="movie-session-card__date">{{ session.starts_at|date:"d.m.Y" }}</span>
+          <strong>{{ session.starts_at|date:"H:i" }}</strong>
+          <span class="movie-session-card__hall">{{ session.hall.name }}</span>
+          <span class="movie-session-card__action">Выбрать места <span aria-hidden="true">→</span></span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="movie-detail-empty">Расписание для этого фильма пока не опубликовано.</div>
+      {% endif %}
+    </section>
 
-    {% if avg_rating %}
-        <p><strong>Средняя оценка:</strong> {{ avg_rating|floatformat:1 }}</p>
-    {% else %}
-        <p><strong>Средняя оценка:</strong> пока нет оценок</p>
-    {% endif %}
+    <section class="movie-detail-reviews" id="reviews" aria-labelledby="movie-reviews-heading">
+      <div class="movie-detail-section-heading">
+        <div>
+          <p class="eyebrow">МНЕНИЯ ЗРИТЕЛЕЙ</p>
+          <h2 id="movie-reviews-heading">Отзывы</h2>
+        </div>
+      </div>
 
-    {% if movie.description %}
-        <p>{{ movie.description }}</p>
-    {% endif %}
-
-    <h2>Ближайшие сеансы</h2>
-    {% if upcoming_sessions %}
-        <ul>
-            {% for s in upcoming_sessions %}
-                <li>
-                    <a href="{% url 'session_detail' s.pk %}">
-                        {{ s.starts_at|date:"d.m.Y H:i" }} — {{ s.hall.name }}
-                    </a>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>Ближайших сеансов пока нет.</p>
-    {% endif %}
-
-    <h2>Отзывы</h2>
-    {% if user.is_authenticated %}
-        <form method="post">
+      <div class="movie-review-layout">
+        <div class="movie-review-form-card">
+          {% if user.is_authenticated %}
+          <h3>Поделитесь впечатлением</h3>
+          <form method="post" class="movie-review-form">
             {% csrf_token %}
             {{ form.as_p }}
-            <button type="submit">Оставить отзыв</button>
-        </form>
-    {% else %}
-        <p><a href="{% url 'login' %}">Войдите</a>, чтобы оставить отзыв.</p>
-    {% endif %}
+            <button class="btn btn-primary" type="submit">Оставить отзыв</button>
+          </form>
+          {% else %}
+          <h3>Смотрели этот фильм?</h3>
+          <p>Войдите, чтобы поделиться впечатлением.</p>
+          <a class="btn btn-secondary" href="{% url 'login' %}?next={{ request.path }}">Войти</a>
+          {% endif %}
+        </div>
 
-    {% if reviews %}
-        <ul>
-            {% for review in reviews %}
-                <li style="margin-top: 12px;">
-                    <strong>{{ review.user.username }}</strong> — оценка: <strong>{{ review.rating }}</strong>
-                    {% if review.created_at %}
-                        ({{ review.created_at|date:"d.m.Y H:i" }})
-                    {% endif %}
-                    <br>
-                    {{ review.text }}
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>Отзывов пока нет. Будьте первым!</p>
-    {% endif %}
+        <div class="movie-review-list">
+          {% for review in reviews %}
+          <article class="movie-review-card">
+            <div class="movie-review-card__header">
+              <strong>{{ review.user.get_username }}</strong>
+              <span class="movie-review-stars" aria-label="Оценка {{ review.rating }} из 5">
+                <span aria-hidden="true">★</span> {{ review.rating }}/5
+              </span>
+            </div>
+            <time datetime="{{ review.created_at|date:'c' }}">{{ review.created_at|date:"d.m.Y" }}</time>
+            <p>{{ review.text }}</p>
+          </article>
+          {% empty %}
+          <div class="movie-detail-empty">Отзывов пока нет. Будьте первым зрителем, кто поделится мнением.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
 {% endblock %}
