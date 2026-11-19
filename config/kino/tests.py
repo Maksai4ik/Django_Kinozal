@@ -3,11 +3,13 @@ import os
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO, StringIO
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth.models import User
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -538,6 +540,42 @@ class TicketPaymentTests(TestCase):
         self.assertEqual(self.booking.expires_at, self.booking_expires_at)
         self.assertEqual(ticket.price, self.price.price)
         self.assertEqual(ticket.channel, Ticket.Channel.ONLINE)
+        response = self.client.get(reverse("my_bookings"))
+        self.assertContains(response, "не указан адрес электронной почты")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_online_payment_emails_ticket_and_does_not_send_twice(self):
+        self.user.email = "viewer@example.com"
+        self.user.save(update_fields=["email"])
+
+        self.client.post(reverse("pay_booking", args=[self.booking.pk]))
+        ticket = Ticket.objects.get(booking=self.booking)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["viewer@example.com"])
+        self.assertIn(ticket.number, mail.outbox[0].body)
+        self.assertIn(self.movie.title, mail.outbox[0].body)
+
+        self.client.post(reverse("pay_booking", args=[self.booking.pk]))
+        self.assertEqual(len(mail.outbox), 1)
+
+    @patch("kino.views.send_mail", side_effect=OSError("mail server unavailable"))
+    def test_email_failure_does_not_cancel_ticket(self, send_mail_mock):
+        self.user.email = "viewer@example.com"
+        self.user.save(update_fields=["email"])
+
+        with self.assertLogs("kino.views", level="ERROR"):
+            response = self.client.post(
+                reverse("pay_booking", args=[self.booking.pk]),
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.Status.PAID)
+        self.assertTrue(Ticket.objects.filter(booking=self.booking).exists())
+        response = self.client.get(reverse("my_bookings"))
+        self.assertContains(response, "письмо отправить не удалось")
+        send_mail_mock.assert_called_once()
 
     def test_my_bookings_shows_a_countdown_for_active_holds(self):
         response = self.client.get(reverse("my_bookings"))
@@ -567,10 +605,14 @@ class TicketPaymentTests(TestCase):
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, Booking.Status.EXPIRED)
 
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_cashier_payment_records_channel_and_cashier(self):
+        self.user.email = "buyer@example.com"
+        self.user.save(update_fields=["email"])
         cashier = User.objects.create_user(
             username="cashier",
             password="StrongTestPassword123!",
+            email="cashier@example.com",
             is_staff=True,
         )
         self.client.force_login(cashier)
@@ -588,6 +630,9 @@ class TicketPaymentTests(TestCase):
         ticket = Ticket.objects.get(booking=self.booking)
         self.assertEqual(ticket.channel, Ticket.Channel.CASHBOX)
         self.assertEqual(ticket.issued_by, cashier)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["buyer@example.com"])
+        self.assertIn("Касса", mail.outbox[0].body)
 
     def test_regular_user_cannot_issue_cashbox_ticket(self):
         response = self.client.post(

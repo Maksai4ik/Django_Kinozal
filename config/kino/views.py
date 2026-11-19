@@ -1,4 +1,6 @@
 import csv
+import logging
+import smtplib
 import uuid
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -11,6 +13,7 @@ from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Count, Q, Sum
+from django.core.mail import send_mail
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -37,6 +40,9 @@ from .models import (
     Ticket,
 )
 from .permissions import is_staff_or_cashier
+
+
+logger = logging.getLogger(__name__)
 
 
 class StaffLoginView(LoginView):
@@ -473,6 +479,39 @@ def cancel_booking(request, pk):
     return redirect("my_bookings")
 
 
+def _send_ticket_receipt(ticket):
+    booking = ticket.booking
+    session = booking.session
+    seat = booking.seat
+    body = "\n".join(
+        [
+            f"Здравствуйте, {booking.user.get_username()}!",
+            "",
+            "Ваш билет оформлен.",
+            f"Фильм: {session.movie.title}",
+            (
+                "Сеанс: "
+                f"{timezone.localtime(session.starts_at):%d.%m.%Y %H:%M}"
+            ),
+            f"Зал: {session.hall.name}",
+            f"Место: ряд {seat.row}, место {seat.number}",
+            f"Категория места: {seat.get_category_display()}",
+            f"Стоимость: {ticket.price} ₽",
+            f"Номер билета: {ticket.number}",
+            f"Способ оформления: {ticket.get_channel_display()}",
+        ]
+    )
+    return bool(
+        send_mail(
+            subject=f"Ваш билет {ticket.number}",
+            message=body,
+            from_email=None,
+            recipient_list=[booking.user.email],
+            fail_silently=False,
+        )
+    )
+
+
 @login_required
 def pay_booking(request, pk):
     if request.method != "POST":
@@ -534,7 +573,7 @@ def pay_booking(request, pk):
             ticket_number = f"TKT-{booking.id}-{uuid.uuid4().hex[:6].upper()}"
             try:
                 with transaction.atomic():
-                    Ticket.objects.create(
+                    ticket = Ticket.objects.create(
                         booking=booking,
                         number=ticket_number,
                         price=session_price.price,
@@ -553,10 +592,33 @@ def pay_booking(request, pk):
         booking.status = Booking.Status.PAID
         booking.save()
 
+    email_sent = False
+    if booking.user.email:
+        try:
+            email_sent = _send_ticket_receipt(ticket)
+        except (OSError, smtplib.SMTPException):
+            logger.exception(
+                "Ticket %s was issued but its receipt email could not be sent",
+                ticket.number,
+            )
+
     messages.success(
         request,
         f"Билет {ticket_number} успешно оформлен! Стоимость: {session_price.price} ₽.",
     )
+    if email_sent:
+        messages.info(request, f"Копия билета отправлена на {booking.user.email}.")
+    elif booking.user.email:
+        messages.warning(
+            request,
+            "Билет оформлен, но письмо отправить не удалось. "
+            "Попробуйте позже или откройте билет в личном кабинете.",
+        )
+    else:
+        messages.warning(
+            request,
+            "Билет оформлен, но в профиле не указан адрес электронной почты.",
+        )
     return redirect(redirect_name)
 
 
