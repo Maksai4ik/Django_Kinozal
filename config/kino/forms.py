@@ -1,0 +1,44 @@
+from django import forms
+from django.contrib.auth.models import User
+from django.contrib.auth.forms import UserCreationForm
+from .models import Review
+
+
+# Форма регистрации нового пользователя
+class RegisterForm(UserCreationForm):
+    # Добавляем поле электронной почты поверх стандартных полей регистрации
+    email = forms.EmailField(label="Электронная почта", required=False)
+
+    class Meta:
+        model = User
+        fields = ("username", "email")
+        labels = {
+            "username": "Имя пользователя",
+        }
+
+
+# Форма редактирования профиля пользователя
+class ProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ("username", "first_name", "last_name", "email")
+        labels = {
+            "username": "Имя пользователя",
+            "first_name": "Имя",
+            "last_name": "Фамилия",
+            "email": "Электронная почта",
+        }
+
+
+# Форма добавления отзыва к фильму
+class ReviewForm(forms.ModelForm):
+    class Meta:
+        model = Review
+        fields = ("rating", "text")
+        labels = {
+            "rating": "Оценка",
+            "text": "Текст отзыва",
+        }
+        widgets = {
+            "text": forms.Textarea(attrs={"rows": 3}),
+        }
