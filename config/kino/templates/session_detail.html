@@ -5,7 +5,11 @@
 {% block content %}
 <p class="crumbs"><a href="{% url 'index' %}">← Назад к афише</a></p>
 <h1>{{ session.movie.title }}</h1>
-<p><strong>Начало:</strong> {{ session.starts_at|date:"d.m.Y H:i" }}</p>
+<p><strong>Начало:</strong>
+  <time datetime="{{ session.starts_at|date:'c' }}" data-local-datetime>
+    {{ session.starts_at|date:"d.m.Y H:i" }}
+  </time>
+</p>
 
 <section class="session">
   <div>
@@ -98,7 +102,11 @@
     <h2>Информация о сеансе</h2>
     <dl class="kv">
       <dt>Дата и время</dt>
-      <dd>{{ session.starts_at|date:"d.m.Y H:i" }}</dd>
+      <dd>
+        <time datetime="{{ session.starts_at|date:'c' }}" data-local-datetime>
+          {{ session.starts_at|date:"d.m.Y H:i" }}
+        </time>
+      </dd>
       <dt>Зал</dt>
       <dd>{{ session.hall.name }}</dd>
     </dl>

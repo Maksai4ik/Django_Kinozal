@@ -56,5 +56,66 @@
   </div>
 </footer>
 
+<script>
+(() => {
+  const formatters = {
+    datetime: new Intl.DateTimeFormat("ru-RU", {
+      dateStyle: "short",
+      timeStyle: "short"
+    }),
+    date: new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" }),
+    time: new Intl.DateTimeFormat("ru-RU", { timeStyle: "short" })
+  };
+
+  document.querySelectorAll("[data-local-datetime]").forEach((element) => {
+    const value = element.getAttribute("datetime") || element.dataset.localDatetime;
+    const formatter = formatters[element.dataset.localFormat || "datetime"];
+    const date = new Date(value);
+    if (!formatter || Number.isNaN(date.getTime())) {
+      console.error("Не удалось отобразить дату и время:", value);
+      return;
+    }
+    element.textContent = formatter.format(date);
+  });
+
+  let expirationReloadScheduled = false;
+  document.querySelectorAll("[data-booking-timer]").forEach((timer) => {
+    const row = timer.closest("[data-booking-row]");
+    const status = row.querySelector("[data-booking-status]");
+    const actions = row.querySelector("[data-booking-actions]");
+    const expiresAt = Date.parse(timer.dataset.expiresAt);
+    const serverNow = Date.parse(timer.dataset.serverNow);
+
+    if (Number.isNaN(expiresAt) || Number.isNaN(serverNow)) {
+      timer.textContent = "Не удалось определить время окончания";
+      console.error("Некорректный срок удержания брони:", timer.dataset.expiresAt);
+      return;
+    }
+
+    const startedAt = performance.now();
+    const updateCountdown = () => {
+      const remaining = expiresAt - serverNow - (performance.now() - startedAt);
+      if (remaining <= 0) {
+        timer.textContent = "00:00 — срок истёк";
+        status.textContent = "Истекла";
+        actions.hidden = true;
+        if (!expirationReloadScheduled) {
+          expirationReloadScheduled = true;
+          window.setTimeout(() => window.location.reload(), 1000);
+        }
+        return;
+      }
+
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      timer.textContent = `${minutes}:${seconds}`;
+    };
+
+    updateCountdown();
+    window.setInterval(updateCountdown, 1000);
+  });
+})();
+</script>
 </body>
 </html>

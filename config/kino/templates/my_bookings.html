@@ -9,23 +9,36 @@
     {% if bookings %}
         <ul>
             {% for booking in bookings %}
-                <li style="margin-bottom: 14px;">
+                <li data-booking-row style="margin-bottom: 14px;">
                     Бронь №{{ booking.pk }}:
                     <strong>{{ booking.session.movie.title }}</strong> —
                     {{ booking.session.hall.name }},
-                    {{ booking.session.starts_at|date:"d.m.Y H:i" }}<br>
+                    <time datetime="{{ booking.session.starts_at|date:'c' }}" data-local-datetime>
+                        {{ booking.session.starts_at|date:"d.m.Y H:i" }}
+                    </time><br>
                     Место: ряд {{ booking.seat.row }}, место {{ booking.seat.number }}<br>
-                    Статус: <strong>{{ booking.get_status_display }}</strong>
+                    Статус: <strong data-booking-status>{{ booking.get_status_display }}</strong>
                     {% if booking.status == "held" %}
-                        (до {{ booking.expires_at|date:"H:i" }})<br>
-                        <form method="post" action="{% url 'pay_booking' booking.pk %}" style="display:inline;">
-                           {% csrf_token %}
-                          <button type="submit">Выкупить билет</button>
-                        </form>
-                        <form method="post" action="{% url 'cancel_booking' booking.pk %}" style="display:inline;">
-                            {% csrf_token %}
-                            <button type="submit">Отменить бронь</button>
-                        </form>
+                        <br>Истекает в
+                        <time datetime="{{ booking.expires_at|date:'c' }}" data-local-datetime data-local-format="time">
+                            {{ booking.expires_at|date:"H:i" }}
+                        </time> · Осталось:
+                        <span
+                            class="timer-value"
+                            data-booking-timer
+                            data-expires-at="{{ booking.expires_at|date:'c' }}"
+                            data-server-now="{{ server_now|date:'c' }}"
+                        >рассчитываем…</span>
+                        <div data-booking-actions>
+                            <form method="post" action="{% url 'pay_booking' booking.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit">Выкупить билет</button>
+                            </form>
+                            <form method="post" action="{% url 'cancel_booking' booking.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit">Отменить бронь</button>
+                            </form>
+                        </div>
                     {% endif %}
                     {% if booking.ticket %}
                         <br>Билет № <strong>{{ booking.ticket.number }}</strong> ({{ booking.ticket.price }} ₽)

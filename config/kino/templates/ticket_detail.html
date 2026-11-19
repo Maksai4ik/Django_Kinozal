@@ -21,7 +21,11 @@
     <div class="grid3">
       <div>
         <div class="lbl">Дата и время</div>
-        <strong>{{ ticket.booking.session.starts_at|date:"d.m.Y H:i" }}</strong>
+        <strong>
+          <time datetime="{{ ticket.booking.session.starts_at|date:'c' }}" data-local-datetime>
+            {{ ticket.booking.session.starts_at|date:"d.m.Y H:i" }}
+          </time>
+        </strong>
       </div>
       <div>
         <div class="lbl">Зал</div>
@@ -37,7 +41,12 @@
       </div>
     </div>
     <p>Покупатель: <strong>{{ ticket.booking.user.username }}</strong></p>
-    <p>Оформлен: {{ ticket.issued_at|date:"d.m.Y H:i" }} · {{ ticket.get_channel_display }}</p>
+    <p>Оформлен:
+      <time datetime="{{ ticket.issued_at|date:'c' }}" data-local-datetime>
+        {{ ticket.issued_at|date:"d.m.Y H:i" }}
+      </time>
+      · {{ ticket.get_channel_display }}
+    </p>
     {% if ticket.issued_by %}
       <p>Кассир: {{ ticket.issued_by.get_username }}</p>
     {% endif %}

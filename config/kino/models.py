@@ -207,6 +207,14 @@ class Booking(models.Model):
             return True
         return self.status == self.Status.HELD and self.expires_at > now
 
+    @classmethod
+    def expire_due(cls, now=None):
+        now = now or timezone.now()
+        return cls.objects.filter(
+            status=cls.Status.HELD,
+            expires_at__lte=now,
+        ).update(status=cls.Status.EXPIRED)
+
 
 class Ticket(models.Model):
     class Channel(models.TextChoices):

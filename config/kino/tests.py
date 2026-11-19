@@ -198,6 +198,34 @@ class TicketPaymentTests(TestCase):
         self.assertEqual(ticket.price, self.price.price)
         self.assertEqual(ticket.channel, Ticket.Channel.ONLINE)
 
+    def test_my_bookings_shows_a_countdown_for_active_holds(self):
+        response = self.client.get(reverse("my_bookings"))
+
+        self.assertContains(response, "data-booking-timer")
+        self.assertContains(response, "data-server-now=")
+
+    def test_my_bookings_marks_expired_holds_as_expired(self):
+        now = timezone.now()
+        self.booking.created_at = now - timedelta(minutes=20)
+        self.booking.expires_at = now - timedelta(minutes=5)
+        self.booking.save(update_fields=["created_at", "expires_at"])
+
+        self.client.get(reverse("my_bookings"))
+
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.Status.EXPIRED)
+
+    def test_expired_hold_cannot_be_cancelled(self):
+        now = timezone.now()
+        self.booking.created_at = now - timedelta(minutes=20)
+        self.booking.expires_at = now - timedelta(minutes=5)
+        self.booking.save(update_fields=["created_at", "expires_at"])
+
+        self.client.post(reverse("cancel_booking", args=[self.booking.pk]))
+
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.Status.EXPIRED)
+
     def test_cashier_payment_records_channel_and_cashier(self):
         cashier = User.objects.create_user(
             username="cashier",
@@ -360,6 +388,17 @@ class SeatBookingTests(TestCase):
             reverse("session_detail", args=[self.session.pk]),
             fetch_redirect_response=False,
         )
+        self.assertFalse(Booking.objects.filter(session=self.session).exists())
+
+    def test_session_that_has_started_cannot_be_booked(self):
+        self.session.starts_at = timezone.now() - timedelta(seconds=1)
+        self.session.save(update_fields=["starts_at"])
+
+        self.client.post(
+            reverse("book_seats", args=[self.session.pk]),
+            {"seats": [self.seats[0].pk]},
+        )
+
         self.assertFalse(Booking.objects.filter(session=self.session).exists())
 
     def test_conflict_does_not_partially_book_selected_seats(self):

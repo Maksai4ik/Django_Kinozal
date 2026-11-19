@@ -30,7 +30,12 @@
         </p>
         <p class="home-feature__description">{{ featured.movie.description|default:"Выберите сеанс и проведите вечер за хорошим кино."|truncatewords:30 }}</p>
         <p class="home-feature__next">
-          Ближайший сеанс: <strong>{{ featured.sessions.0.starts_at|time:"H:i" }}</strong>
+          Ближайший сеанс:
+          <strong>
+            <time datetime="{{ featured.sessions.0.starts_at|date:'c' }}" data-local-datetime data-local-format="time">
+              {{ featured.sessions.0.starts_at|time:"H:i" }}
+            </time>
+          </strong>
           <span>· {{ featured.sessions.0.hall.name }}</span>
         </p>
         <div class="home-feature__actions">
@@ -102,7 +107,9 @@
           <div class="home-showtimes" aria-label="Сеансы фильма {{ showing.movie.title }}">
             {% for session in showing.sessions %}
             <a href="{% url 'session_detail' session.pk %}" title="{{ session.hall.name }}">
-              {{ session.starts_at|time:"H:i" }}
+              <time datetime="{{ session.starts_at|date:'c' }}" data-local-datetime data-local-format="time">
+                {{ session.starts_at|time:"H:i" }}
+              </time>
             </a>
             {% endfor %}
           </div>

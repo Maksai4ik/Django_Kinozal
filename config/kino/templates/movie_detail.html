@@ -60,8 +60,16 @@
       <div class="movie-session-grid">
         {% for session in upcoming_sessions %}
         <a class="movie-session-card" href="{% url 'session_detail' session.pk %}">
-          <span class="movie-session-card__date">{{ session.starts_at|date:"d.m.Y" }}</span>
-          <strong>{{ session.starts_at|date:"H:i" }}</strong>
+          <span class="movie-session-card__date">
+            <time datetime="{{ session.starts_at|date:'c' }}" data-local-datetime data-local-format="date">
+              {{ session.starts_at|date:"d.m.Y" }}
+            </time>
+          </span>
+          <strong>
+            <time datetime="{{ session.starts_at|date:'c' }}" data-local-datetime data-local-format="time">
+              {{ session.starts_at|date:"H:i" }}
+            </time>
+          </strong>
           <span class="movie-session-card__hall">{{ session.hall.name }}</span>
           <span class="movie-session-card__action">Выбрать места <span aria-hidden="true">→</span></span>
         </a>

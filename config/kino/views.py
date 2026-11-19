@@ -363,13 +363,19 @@ def book_seat(request, session_id, seat_id):
 
 @login_required
 def my_bookings(request):
+    server_now = timezone.now()
+    Booking.expire_due(server_now)
     # Берём только брони текущего пользователя, сразу подтягивая связанные данные
     bookings = (
         Booking.objects.filter(user=request.user)
         .select_related("session__movie", "session__hall", "seat", "ticket")
         .order_by("-created_at")
     )
-    return render(request, "my_bookings.html", {"bookings": bookings})
+    return render(
+        request,
+        "my_bookings.html",
+        {"bookings": bookings, "server_now": server_now},
+    )
 
 
 @login_required
@@ -387,12 +393,20 @@ def cancel_booking(request, pk):
         messages.error(request, "У вас нет прав на отмену этой брони.")
         return redirect("my_bookings")
 
+    now = timezone.now()
+
     # Отменить можно только бронь, которая сейчас удерживается
     if booking.status != Booking.Status.HELD:
         messages.error(request, "Отменить можно только активную удержанную бронь.")
         return redirect("my_bookings")
 
-    if booking.session.starts_at <= timezone.now():
+    if booking.expires_at <= now:
+        booking.status = Booking.Status.EXPIRED
+        booking.save(update_fields=["status"])
+        messages.error(request, "Срок удержания истёк, бронь уже освобождена.")
+        return redirect("my_bookings")
+
+    if booking.session.starts_at <= now:
         messages.error(request, "Отменить бронь можно только до начала сеанса.")
         return redirect("my_bookings")
 
@@ -570,6 +584,9 @@ def cashier_bookings(request):
         messages.error(request, "Доступ к служебной странице есть только у кассиров и сотрудников.")
         return redirect("index")
 
+    server_now = timezone.now()
+    Booking.expire_due(server_now)
+
     selected_session_id = request.GET.get("session", "").strip()
     search_query = request.GET.get("q", "").strip()
 
@@ -605,5 +622,6 @@ def cashier_bookings(request):
             "sessions": sessions,
             "selected_session_id": selected_session_id,
             "search_query": search_query,
+            "server_now": server_now,
         },
     )
