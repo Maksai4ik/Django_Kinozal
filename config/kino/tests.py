@@ -1,7 +1,8 @@
+import csv
 import os
 from datetime import timedelta
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 
 from django.contrib import admin
 from django.contrib.auth.models import User
@@ -648,6 +649,167 @@ class TicketPaymentTests(TestCase):
 
         self.assertContains(response, f"Бронь №{self.booking.pk}")
         self.assertContains(response, self.movie.title)
+
+
+class SalesReportTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username="report_admin",
+            is_staff=True,
+        )
+        self.viewer = User.objects.create_user(username="report_viewer")
+        self.buyer = User.objects.create_user(username="report_buyer")
+        self.hall = Hall.objects.create(
+            name="Зал отчётов",
+            rows_count=5,
+            seats_per_row=8,
+        )
+        self.first_movie = Movie.objects.create(
+            title="Первый фильм отчёта",
+            duration_min=100,
+            year=2026,
+        )
+        self.second_movie = Movie.objects.create(
+            title="Второй фильм отчёта",
+            duration_min=100,
+            year=2026,
+        )
+        starts_at = timezone.now() + timedelta(days=1)
+        self.first_session = Session.objects.create(
+            movie=self.first_movie,
+            hall=self.hall,
+            starts_at=starts_at,
+        )
+        self.second_session = Session.objects.create(
+            movie=self.second_movie,
+            hall=self.hall,
+            starts_at=starts_at + timedelta(hours=2),
+        )
+        self.today = timezone.localdate()
+        self.start_date = self.today.replace(day=1)
+        self.now = timezone.now()
+        self.seat_number = 0
+        self.ticket_number = 0
+
+        self.create_ticket(self.first_session, "100.00")
+        self.create_ticket(self.first_session, "200.00")
+        self.create_ticket(self.second_session, "300.00")
+        old_date = self.now - timedelta(days=40)
+        self.create_ticket(
+            self.first_session,
+            "400.00",
+            issued_at=old_date,
+            booking_created_at=old_date,
+        )
+        self.seat_number += 1
+        old_booking_created = self.now - timedelta(minutes=20)
+        Booking.objects.create(
+            user=self.buyer,
+            session=self.first_session,
+            seat=Seat.objects.create(
+                hall=self.hall,
+                row=1,
+                number=self.seat_number,
+            ),
+            status=Booking.Status.EXPIRED,
+            created_at=old_booking_created,
+            expires_at=old_booking_created + timedelta(minutes=15),
+        )
+
+    def create_ticket(
+        self,
+        session,
+        price,
+        issued_at=None,
+        booking_created_at=None,
+    ):
+        self.seat_number += 1
+        self.ticket_number += 1
+        booking_created_at = booking_created_at or self.now
+        booking = Booking.objects.create(
+            user=self.buyer,
+            session=session,
+            seat=Seat.objects.create(
+                hall=self.hall,
+                row=1,
+                number=self.seat_number,
+            ),
+            status=Booking.Status.PAID,
+            created_at=booking_created_at,
+            expires_at=booking_created_at + timedelta(minutes=15),
+        )
+        return Ticket.objects.create(
+            booking=booking,
+            number=f"RPT-{self.ticket_number:04d}",
+            price=Decimal(price),
+            issued_at=issued_at or self.now,
+        )
+
+    def report_params(self):
+        return {
+            "start_date": self.start_date.isoformat(),
+            "end_date": self.today.isoformat(),
+        }
+
+    def test_staff_report_summarizes_sales_and_movie_chart(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("sales_report"),
+            self.report_params(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Продажи по фильмам")
+        self.assertContains(response, reverse("sales_report"))
+        report = response.context["report"]
+        self.assertEqual(report["ticket_count"], 3)
+        self.assertEqual(report["revenue"], Decimal("600.00"))
+        self.assertEqual(report["average_ticket_price"], Decimal("200.00"))
+        self.assertEqual(report["paid_booking_share"], 75.0)
+        self.assertEqual(report["sales_by_movie"][0]["movie_title"], self.first_movie.title)
+        self.assertEqual(report["sales_by_movie"][0]["ticket_count"], 2)
+
+    def test_csv_export_contains_only_sales_in_selected_period(self):
+        self.client.force_login(self.admin)
+        self.first_movie.title = "=SUM(1,1)"
+        self.first_movie.save(update_fields=["title"])
+
+        response = self.client.get(
+            reverse("sales_report"),
+            {**self.report_params(), "export": "csv"},
+        )
+
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        self.assertIn("attachment;", response["Content-Disposition"])
+        rows = list(csv.reader(StringIO(response.content.decode("utf-8-sig"))))
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(rows[0][0], "Номер билета")
+        self.assertIn("RPT-0001", response.content.decode("utf-8-sig"))
+        self.assertIn("'=SUM(1,1)", response.content.decode("utf-8-sig"))
+        self.assertNotIn("RPT-0004", response.content.decode("utf-8-sig"))
+
+    def test_sales_report_is_limited_to_staff(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("sales_report"))
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_invalid_date_range_shows_form_error_without_report(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("sales_report"),
+            {
+                "start_date": self.today.isoformat(),
+                "end_date": self.start_date.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["report"])
+        self.assertIn("end_date", response.context["form"].errors)
 
 
 class SeatBookingTests(TestCase):

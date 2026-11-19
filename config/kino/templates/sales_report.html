@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Сводка продаж{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <div>
+    <p class="eyebrow">АДМИНИСТРАТИВНАЯ СВОДКА</p>
+    <h1>Продажи билетов</h1>
+  </div>
+</div>
+
+<form class="filters sales-report-filters" method="get">
+  <div class="field">
+    {{ form.start_date.label_tag }}
+    {{ form.start_date }}
+    {{ form.start_date.errors }}
+  </div>
+  <div class="field">
+    {{ form.end_date.label_tag }}
+    {{ form.end_date }}
+    {{ form.end_date.errors }}
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Показать</button>
+    <button class="btn btn-secondary" type="submit" name="export" value="csv">
+      Скачать CSV
+    </button>
+  </div>
+</form>
+
+{% if report %}
+<p class="small">
+  Период: {{ start_date|date:"d.m.Y" }} — {{ end_date|date:"d.m.Y" }}
+</p>
+<section class="stats" aria-label="Итоги продаж">
+  <article class="card stat">
+    <span class="lbl">Продано билетов</span>
+    <div class="v">{{ report.ticket_count }}</div>
+  </article>
+  <article class="card stat">
+    <span class="lbl">Выручка</span>
+    <div class="v">{{ report.revenue|floatformat:2 }} ₽</div>
+  </article>
+  <article class="card stat">
+    <span class="lbl">Средняя цена билета</span>
+    <div class="v">{{ report.average_ticket_price|floatformat:2 }} ₽</div>
+  </article>
+  <article class="card stat">
+    <span class="lbl">Доля выкупленных броней</span>
+    <div class="v">{{ report.paid_booking_share|floatformat:1 }}%</div>
+    <p class="small">{{ report.paid_bookings }} из {{ report.total_bookings }} броней, созданных за период</p>
+  </article>
+</section>
+
+<section class="card">
+  <h2>Продажи по фильмам</h2>
+  {% if report.sales_by_movie %}
+  <div class="bars">
+    {% for sale in report.sales_by_movie %}
+    <div class="bar">
+      <span>
+        {{ sale.movie_title }}<br>
+        <span class="small">{{ sale.revenue|floatformat:2 }} ₽</span>
+      </span>
+      <div class="track" role="img" aria-label="{{ sale.ticket_count }} билетов">
+        <div class="fill" style="width: {{ sale.bar_width }}%"></div>
+      </div>
+      <strong>{{ sale.ticket_count }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="small">За выбранный период продаж не было.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

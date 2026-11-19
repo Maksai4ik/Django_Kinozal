@@ -48,6 +48,30 @@ class MovieAdminForm(forms.ModelForm):
         fields = "__all__"
 
 
+class SalesReportPeriodForm(forms.Form):
+    start_date = forms.DateField(
+        label="С даты",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "input"}),
+    )
+    end_date = forms.DateField(
+        label="По дату",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "input"}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get("start_date")
+        end_date = cleaned_data.get("end_date")
+        if start_date and end_date and start_date > end_date:
+            self.add_error(
+                "end_date",
+                "Дата окончания не может быть раньше даты начала.",
+            )
+        return cleaned_data
+
+
 # Форма регистрации нового пользователя
 class RegisterForm(UserCreationForm):
     # Добавляем поле электронной почты поверх стандартных полей регистрации

@@ -96,6 +96,9 @@ a.card,.card.clickable{display:block;text-decoration:none;color:inherit}
 @media(min-width:768px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(min-width:1024px){.filters{grid-template-columns:2fr 1fr 1fr 1fr auto;align-items:end}}
 .filters .field{margin:0}
+.filters.sales-report-filters{grid-template-columns:repeat(2,minmax(0,1fr));align-items:end}
+@media(min-width:1024px){.filters.sales-report-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}}
+.filters.sales-report-filters .actions{display:flex;gap:8px;flex-wrap:wrap}
 .sortbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .sortbar .select{width:auto;min-width:220px}
 .cards{display:grid;gap:20px;grid-template-columns:minmax(0,1fr)}

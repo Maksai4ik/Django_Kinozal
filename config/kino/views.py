@@ -1,14 +1,17 @@
-from datetime import timedelta
+import csv
 import uuid
+from datetime import datetime, time, timedelta
+from decimal import Decimal
 
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Q
-from django.http import JsonResponse
+from django.db.models import Avg, Count, Q, Sum
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.dateparse import parse_date
@@ -20,6 +23,7 @@ from .forms import (
     ProfileForm,
     RegisterForm,
     ReviewForm,
+    SalesReportPeriodForm,
 )
 from .models import (
     Booking,
@@ -578,6 +582,169 @@ def ticket_detail(request, pk):
             "back_url": reverse("cashier_bookings" if cashier else "my_bookings"),
         },
     )
+
+
+def _sales_csv_response(tickets, start_date, end_date):
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = (
+        f'attachment; filename="sales_{start_date:%Y-%m-%d}_{end_date:%Y-%m-%d}.csv"'
+    )
+    response.write("\ufeff")
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Номер билета",
+            "Дата продажи",
+            "Фильм",
+            "Начало сеанса",
+            "Зал",
+            "Ряд",
+            "Место",
+            "Категория места",
+            "Покупатель",
+            "Цена, руб.",
+            "Канал",
+            "Кассир",
+        ]
+    )
+    for ticket in tickets.order_by("issued_at", "pk"):
+        booking = ticket.booking
+        session = booking.session
+        seat = booking.seat
+        text_values = (
+            ticket.number,
+            timezone.localtime(ticket.issued_at).strftime("%Y-%m-%d %H:%M:%S"),
+            session.movie.title,
+            timezone.localtime(session.starts_at).strftime("%Y-%m-%d %H:%M"),
+            session.hall.name,
+            seat.get_category_display(),
+            booking.user.get_username(),
+            ticket.get_channel_display(),
+            ticket.issued_by.get_username() if ticket.issued_by else "",
+        )
+        safe_text_values = [
+            f"'{value}" if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
+            for value in text_values
+        ]
+        writer.writerow(
+            [
+                safe_text_values[0],
+                safe_text_values[1],
+                safe_text_values[2],
+                safe_text_values[3],
+                safe_text_values[4],
+                seat.row,
+                seat.number,
+                safe_text_values[5],
+                safe_text_values[6],
+                ticket.price,
+                safe_text_values[7],
+                safe_text_values[8],
+            ]
+        )
+    return response
+
+
+@staff_member_required
+def sales_report(request):
+    today = timezone.localdate()
+    default_start_date = today.replace(day=1)
+    form = SalesReportPeriodForm(
+        request.GET or None,
+        initial={
+            "start_date": default_start_date,
+            "end_date": today,
+        },
+    )
+    if form.is_bound and not form.is_valid():
+        return render(
+            request,
+            "sales_report.html",
+            {
+                "form": form,
+                "report": None,
+            },
+        )
+
+    period = form.cleaned_data if form.is_bound else {}
+    start_date = period.get("start_date") or default_start_date
+    end_date = period.get("end_date") or today
+    current_timezone = timezone.get_current_timezone()
+    start_datetime = timezone.make_aware(
+        datetime.combine(start_date, time.min),
+        current_timezone,
+    )
+    end_datetime = timezone.make_aware(
+        datetime.combine(end_date + timedelta(days=1), time.min),
+        current_timezone,
+    )
+    tickets = (
+        Ticket.objects.filter(
+            issued_at__gte=start_datetime,
+            issued_at__lt=end_datetime,
+        )
+        .select_related(
+            "booking__session__movie",
+            "booking__session__hall",
+            "booking__seat",
+            "booking__user",
+            "issued_by",
+        )
+    )
+    if request.GET.get("export") == "csv":
+        return _sales_csv_response(tickets, start_date, end_date)
+
+    totals = tickets.aggregate(
+        ticket_count=Count("pk"),
+        revenue=Sum("price"),
+        average_ticket_price=Avg("price"),
+    )
+    booking_period = Booking.objects.filter(
+        created_at__gte=start_datetime,
+        created_at__lt=end_datetime,
+    )
+    total_bookings = booking_period.count()
+    paid_bookings = booking_period.filter(status=Booking.Status.PAID).count()
+    sales_by_movie = list(
+        tickets.order_by()
+        .values("booking__session__movie__title")
+        .annotate(ticket_count=Count("pk"), revenue=Sum("price"))
+        .order_by("-ticket_count", "booking__session__movie__title")
+    )
+    maximum_movie_sales = max(
+        (sale["ticket_count"] for sale in sales_by_movie),
+        default=0,
+    )
+    for sale in sales_by_movie:
+        sale["movie_title"] = sale.pop("booking__session__movie__title")
+        sale["bar_width"] = round(
+            sale["ticket_count"] * 100 / maximum_movie_sales
+        ) if maximum_movie_sales else 0
+
+    report = {
+        "ticket_count": totals["ticket_count"] or 0,
+        "revenue": totals["revenue"] or Decimal("0.00"),
+        "average_ticket_price": totals["average_ticket_price"] or Decimal("0.00"),
+        "paid_bookings": paid_bookings,
+        "total_bookings": total_bookings,
+        "paid_booking_share": (
+            round(paid_bookings * 100 / total_bookings, 1)
+            if total_bookings
+            else 0
+        ),
+        "sales_by_movie": sales_by_movie,
+    }
+    return render(
+        request,
+        "sales_report.html",
+        {
+            "form": form,
+            "report": report,
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+    )
+
 
 def movie_detail(request, pk):
     movie = get_object_or_404(Movie, pk=pk)

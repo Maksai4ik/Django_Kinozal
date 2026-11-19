@@ -28,6 +28,7 @@ urlpatterns = [
     path("movies/<int:pk>/", views.movie_detail, name="movie_detail"),
     path("reviews/<int:pk>/edit/", views.review_edit, name="review_edit"),
     path("reviews/<int:pk>/delete/", views.review_delete, name="review_delete"),
+    path("reports/sales/", views.sales_report, name="sales_report"),
     path("cashier/bookings/", views.cashier_bookings, name="cashier_bookings"),
 ]
 
