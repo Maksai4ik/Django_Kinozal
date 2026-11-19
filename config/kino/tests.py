@@ -198,6 +198,89 @@ class TicketPaymentTests(TestCase):
         self.assertEqual(ticket.price, self.price.price)
         self.assertEqual(ticket.channel, Ticket.Channel.ONLINE)
 
+    def test_cashier_payment_records_channel_and_cashier(self):
+        cashier = User.objects.create_user(
+            username="cashier",
+            password="StrongTestPassword123!",
+            is_staff=True,
+        )
+        self.client.force_login(cashier)
+
+        response = self.client.post(
+            reverse("pay_booking", args=[self.booking.pk]),
+            {"channel": Ticket.Channel.CASHBOX},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("cashier_bookings"),
+            fetch_redirect_response=False,
+        )
+        ticket = Ticket.objects.get(booking=self.booking)
+        self.assertEqual(ticket.channel, Ticket.Channel.CASHBOX)
+        self.assertEqual(ticket.issued_by, cashier)
+
+    def test_regular_user_cannot_issue_cashbox_ticket(self):
+        response = self.client.post(
+            reverse("pay_booking", args=[self.booking.pk]),
+            {"channel": Ticket.Channel.CASHBOX},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("my_bookings"),
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(Ticket.objects.filter(booking=self.booking).exists())
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.Status.HELD)
+
+    def create_paid_ticket(self):
+        self.booking.status = Booking.Status.PAID
+        self.booking.save()
+        return Ticket.objects.create(
+            booking=self.booking,
+            number=f"TKT-{self.booking.pk}-TEST01",
+            price=self.price.price,
+        )
+
+    def test_booking_owner_can_open_printable_ticket(self):
+        ticket = self.create_paid_ticket()
+
+        response = self.client.get(
+            reverse("ticket_detail", args=[ticket.pk]),
+        )
+
+        self.assertContains(response, ticket.number)
+        self.assertContains(response, "Распечатать билет")
+
+    def test_other_user_cannot_open_ticket(self):
+        ticket = self.create_paid_ticket()
+        other_user = User.objects.create_user(username="other")
+        self.client.force_login(other_user)
+
+        response = self.client.get(
+            reverse("ticket_detail", args=[ticket.pk]),
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_cashier_can_search_by_booking_number(self):
+        cashier = User.objects.create_user(
+            username="cashier",
+            password="StrongTestPassword123!",
+            is_staff=True,
+        )
+        self.client.force_login(cashier)
+
+        response = self.client.get(
+            reverse("cashier_bookings"),
+            {"q": str(self.booking.pk)},
+        )
+
+        self.assertContains(response, f"Бронь №{self.booking.pk}")
+        self.assertContains(response, self.movie.title)
+
 
 class SeatBookingTests(TestCase):
     def setUp(self):

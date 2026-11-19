@@ -410,6 +410,20 @@ def pay_booking(request, pk):
     if request.method != "POST":
         return redirect("my_bookings")
 
+    cashier = is_staff_or_cashier(request.user)
+    channel = request.POST.get("channel", Ticket.Channel.ONLINE)
+    redirect_name = (
+        "cashier_bookings"
+        if cashier and channel == Ticket.Channel.CASHBOX
+        else "my_bookings"
+    )
+    if channel not in Ticket.Channel.values:
+        messages.error(request, "Выбран недопустимый способ оформления билета.")
+        return redirect(redirect_name)
+    if channel == Ticket.Channel.CASHBOX and not cashier:
+        messages.error(request, "Выкуп через кассу доступен только кассиру или сотруднику.")
+        return redirect("my_bookings")
+
     now = timezone.now()
 
     with transaction.atomic():
@@ -421,23 +435,23 @@ def pay_booking(request, pk):
         )
 
         is_owner = booking.user_id == request.user.id
-        if not (is_owner or is_staff_or_cashier(request.user)):
+        if not (is_owner or cashier):
             messages.error(request, "У вас нет прав на выкуп этой брони.")
-            return redirect("my_bookings")
+            return redirect(redirect_name)
 
         if booking.status == Booking.Status.PAID or hasattr(booking, "ticket"):
             messages.info(request, "Эта бронь уже выкуплена.")
-            return redirect("my_bookings")
+            return redirect(redirect_name)
 
         if booking.status != Booking.Status.HELD:
             messages.error(request, "Эту бронь нельзя выкупить (она отменена или неактивна).")
-            return redirect("my_bookings")
+            return redirect(redirect_name)
 
         if booking.expires_at and booking.expires_at <= now:
             booking.status = Booking.Status.EXPIRED
             booking.save()
             messages.error(request, "Время удержания брони истекло, место освободилось.")
-            return redirect("my_bookings")
+            return redirect(redirect_name)
 
         session_price = SessionPrice.objects.filter(
             session=booking.session,
@@ -446,24 +460,27 @@ def pay_booking(request, pk):
 
         if not session_price:
             messages.error(request, "Для этого сеанса и категории места не задана цена.")
-            return redirect("my_bookings")
+            return redirect(redirect_name)
 
         for _ in range(5):
             ticket_number = f"TKT-{booking.id}-{uuid.uuid4().hex[:6].upper()}"
             try:
-                Ticket.objects.create(
-                    booking=booking,
-                    number=ticket_number,
-                    price=session_price.price,
-                    issued_at=now,
-                )
+                with transaction.atomic():
+                    Ticket.objects.create(
+                        booking=booking,
+                        number=ticket_number,
+                        price=session_price.price,
+                        issued_at=now,
+                        channel=channel,
+                        issued_by=request.user if channel == Ticket.Channel.CASHBOX else None,
+                    )
                 break
             except IntegrityError:
                 ticket_number = None
 
         if not ticket_number:
             messages.error(request, "Не удалось сформировать уникальный номер билета, попробуйте ещё раз.")
-            return redirect("my_bookings")
+            return redirect(redirect_name)
 
         booking.status = Booking.Status.PAID
         booking.save()
@@ -472,7 +489,31 @@ def pay_booking(request, pk):
         request,
         f"Билет {ticket_number} успешно оформлен! Стоимость: {session_price.price} ₽.",
     )
-    return redirect("my_bookings")
+    return redirect(redirect_name)
+
+
+@login_required
+def ticket_detail(request, pk):
+    tickets = Ticket.objects.select_related(
+        "booking__user",
+        "booking__session__movie",
+        "booking__session__hall",
+        "booking__seat",
+        "issued_by",
+    )
+    cashier = is_staff_or_cashier(request.user)
+    if not cashier:
+        tickets = tickets.filter(booking__user=request.user)
+
+    ticket = get_object_or_404(tickets, pk=pk)
+    return render(
+        request,
+        "ticket_detail.html",
+        {
+            "ticket": ticket,
+            "back_url": reverse("cashier_bookings" if cashier else "my_bookings"),
+        },
+    )
 
 def movie_detail(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
@@ -543,10 +584,13 @@ def cashier_bookings(request):
         bookings = bookings.filter(session_id=int(selected_session_id))
 
     if search_query:
-        bookings = bookings.filter(
+        search_filter = (
             Q(user__username__icontains=search_query)
             | Q(ticket__number__icontains=search_query)
         )
+        if search_query.isdecimal() and len(search_query) <= 18:
+            search_filter |= Q(pk=int(search_query))
+        bookings = bookings.filter(search_filter)
 
     sessions = (
         Session.objects.select_related("movie", "hall")

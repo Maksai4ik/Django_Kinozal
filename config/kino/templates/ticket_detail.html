@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Билет {{ ticket.number }}{% endblock %}
+
+{% block content %}
+<div class="actions" style="margin-bottom: 20px;">
+  <a class="btn btn-secondary" href="{{ back_url }}">Назад</a>
+  <button class="btn btn-primary" type="button" onclick="window.print()">Распечатать билет</button>
+</div>
+
+<article class="ticket">
+  <div class="stub">
+    <p class="eyebrow">КИНОЗАЛ · БИЛЕТ</p>
+    <div class="big">{{ ticket.booking.seat.number }}</div>
+    <p>Ряд {{ ticket.booking.seat.row }}</p>
+    <p>{{ ticket.booking.seat.get_category_display }} место</p>
+  </div>
+  <div class="main">
+    <p class="no">№ {{ ticket.number }}</p>
+    <h1>{{ ticket.booking.session.movie.title }}</h1>
+    <div class="grid3">
+      <div>
+        <div class="lbl">Дата и время</div>
+        <strong>{{ ticket.booking.session.starts_at|date:"d.m.Y H:i" }}</strong>
+      </div>
+      <div>
+        <div class="lbl">Зал</div>
+        <strong>{{ ticket.booking.session.hall.name }}</strong>
+      </div>
+      <div>
+        <div class="lbl">Место</div>
+        <strong>Ряд {{ ticket.booking.seat.row }}, №{{ ticket.booking.seat.number }}</strong>
+      </div>
+      <div>
+        <div class="lbl">Стоимость</div>
+        <strong>{{ ticket.price }} ₽</strong>
+      </div>
+    </div>
+    <p>Покупатель: <strong>{{ ticket.booking.user.username }}</strong></p>
+    <p>Оформлен: {{ ticket.issued_at|date:"d.m.Y H:i" }} · {{ ticket.get_channel_display }}</p>
+    {% if ticket.issued_by %}
+      <p>Кассир: {{ ticket.issued_by.get_username }}</p>
+    {% endif %}
+  </div>
+</article>
+{% endblock %}

@@ -10,6 +10,7 @@
         <ul>
             {% for booking in bookings %}
                 <li style="margin-bottom: 14px;">
+                    Бронь №{{ booking.pk }}:
                     <strong>{{ booking.session.movie.title }}</strong> —
                     {{ booking.session.hall.name }},
                     {{ booking.session.starts_at|date:"d.m.Y H:i" }}<br>
@@ -28,6 +29,7 @@
                     {% endif %}
                     {% if booking.ticket %}
                         <br>Билет № <strong>{{ booking.ticket.number }}</strong> ({{ booking.ticket.price }} ₽)
+                        <br><a href="{% url 'ticket_detail' booking.ticket.pk %}">Открыть билет и печать</a>
                     {% endif %}
                 </li>
             {% endfor %}

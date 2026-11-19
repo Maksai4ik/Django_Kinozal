@@ -17,7 +17,7 @@
             {% endfor %}
         </select>
 
-        <label for="search-input" style="margin-left: 10px;">Поиск (логин или № билета):</label>
+        <label for="search-input" style="margin-left: 10px;">Поиск (№ брони, логин или № билета):</label>
         <input id="search-input" type="text" name="q" value="{{ search_query }}">
 
         <button type="submit">Показать</button>
@@ -28,6 +28,7 @@
         <ul>
             {% for booking in bookings %}
                 <li style="margin-bottom: 14px;">
+                    Бронь №{{ booking.pk }}:
                     <strong>{{ booking.session.movie.title }}</strong> —
                     {{ booking.session.hall.name }},
                     {{ booking.session.starts_at|date:"d.m.Y H:i" }}<br>
@@ -38,6 +39,7 @@
                         (до {{ booking.expires_at|date:"H:i" }})<br>
                         <form method="post" action="{% url 'pay_booking' booking.pk %}" style="display:inline;">
                             {% csrf_token %}
+                            <input type="hidden" name="channel" value="cashbox">
                             <button type="submit">Выкупить на кассе</button>
                         </form>
                         <form method="post" action="{% url 'cancel_booking' booking.pk %}" style="display:inline;">
@@ -47,6 +49,7 @@
                     {% endif %}
                     {% if booking.ticket %}
                         <br>Билет № <strong>{{ booking.ticket.number }}</strong> ({{ booking.ticket.price }} ₽)
+                        <br><a href="{% url 'ticket_detail' booking.ticket.pk %}">Открыть билет и печать</a>
                     {% endif %}
                 </li>
             {% endfor %}
