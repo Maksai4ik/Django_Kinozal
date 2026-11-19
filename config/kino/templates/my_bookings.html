@@ -17,6 +17,10 @@
                     Статус: <strong>{{ booking.get_status_display }}</strong>
                     {% if booking.status == "held" %}
                         (до {{ booking.expires_at|date:"H:i" }})<br>
+                        <form method="post" action="{% url 'pay_booking' booking.pk %}" style="display:inline;">
+                           {% csrf_token %}
+                          <button type="submit">Выкупить билет</button>
+                        </form>
                         <form method="post" action="{% url 'cancel_booking' booking.pk %}" style="display:inline;">
                             {% csrf_token %}
                             <button type="submit">Отменить бронь</button>
