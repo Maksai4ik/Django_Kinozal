@@ -367,7 +367,7 @@ def pay_booking(request, pk):
                     booking=booking,
                     number=ticket_number,
                     price=session_price.price,
-                    purchased_at=now,
+                    issued_at=now,
                 )
                 break
             except IntegrityError:
@@ -378,7 +378,6 @@ def pay_booking(request, pk):
             return redirect("my_bookings")
 
         booking.status = Booking.Status.PAID
-        booking.expires_at = None
         booking.save()
 
     messages.success(

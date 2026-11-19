@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase
@@ -6,7 +7,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import RegisterForm
-from .models import Genre, Hall, Movie, Session
+from .models import (
+    Booking,
+    Genre,
+    Hall,
+    Movie,
+    Seat,
+    Session,
+    SessionPrice,
+    Ticket,
+)
 
 
 class RegisterFormTests(SimpleTestCase):
@@ -128,3 +138,62 @@ class HomePageTests(TestCase):
         self.assertContains(response, reverse("my_bookings"))
         self.assertNotContains(response, "Смотреть афишу")
         self.assertNotContains(response, "Афиша ↓")
+
+
+class TicketPaymentTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="viewer",
+            password="StrongTestPassword123!",
+        )
+        self.hall = Hall.objects.create(
+            name="Зал выкупа",
+            rows_count=5,
+            seats_per_row=8,
+        )
+        self.seat = Seat.objects.create(
+            hall=self.hall,
+            row=1,
+            number=1,
+        )
+        self.movie = Movie.objects.create(
+            title="Фильм для выкупа",
+            duration_min=90,
+            year=2026,
+        )
+        self.session = Session.objects.create(
+            movie=self.movie,
+            hall=self.hall,
+            starts_at=timezone.now() + timedelta(days=1),
+        )
+        self.price = SessionPrice.objects.create(
+            session=self.session,
+            category=self.seat.category,
+            price=Decimal("10.00"),
+        )
+        self.booking = Booking.objects.create(
+            user=self.user,
+            session=self.session,
+            seat=self.seat,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+        self.booking_expires_at = self.booking.expires_at
+        self.client.force_login(self.user)
+
+    def test_payment_issues_ticket_and_keeps_booking_expiry(self):
+        response = self.client.post(
+            reverse("pay_booking", args=[self.booking.pk]),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("my_bookings"),
+            fetch_redirect_response=False,
+        )
+        self.booking.refresh_from_db()
+        ticket = Ticket.objects.get(booking=self.booking)
+
+        self.assertEqual(self.booking.status, Booking.Status.PAID)
+        self.assertEqual(self.booking.expires_at, self.booking_expires_at)
+        self.assertEqual(ticket.price, self.price.price)
+        self.assertEqual(ticket.channel, Ticket.Channel.ONLINE)
