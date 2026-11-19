@@ -13,6 +13,9 @@ from .forms import ProfileForm, RegisterForm
 from .models import Booking, Seat, Session, SessionPrice, Ticket
 from .permissions import is_staff_or_cashier
 
+from django.db.models import Avg
+from .forms import ProfileForm, RegisterForm, ReviewForm
+from .models import Booking, Movie, Review, Seat, Session, SessionPrice, Ticket
 
 def index(request):
     # Берём только те сеансы, которые ещё не начались
@@ -286,3 +289,52 @@ def pay_booking(request, pk):
         f"Билет {ticket_number} успешно оформлен! Стоимость: {session_price.price} ₽.",
     )
     return redirect("my_bookings")
+
+ def movie_detail(request, pk):
+    movie = get_object_or_404(Movie, pk=pk)
+
+    # Ближайшие сеансы этого фильма, которые ещё не начались
+    upcoming_sessions = (
+        Session.objects.filter(movie=movie, starts_at__gte=timezone.now())
+        .select_related("hall")
+        .order_by("starts_at")
+    )
+
+    # Все отзывы по фильму вместе с авторами, от свежих к старым
+    reviews = (
+        Review.objects.filter(movie=movie)
+        .select_related("user")
+        .order_by("-created_at")
+    )
+
+    # Средняя оценка фильма по всем отзывам (вернёт словарь, например {'avg_rating': 4.5} или None)
+    avg_rating = reviews.aggregate(avg_rating=Avg("rating"))["avg_rating"]
+
+    if request.method == "POST":
+        if not request.user.is_authenticated:
+            messages.error(request, "Чтобы оставить отзыв, войдите в аккаунт.")
+            return redirect("login")
+
+        form = ReviewForm(request.POST)
+        if form.is_valid():
+            # Сначала создаём объект отзыва в памяти, чтобы подставить автора и фильм
+            review = form.save(commit=False)
+            review.user = request.user
+            review.movie = movie
+            review.save()
+            messages.success(request, "Спасибо! Ваш отзыв добавлен.")
+            return redirect("movie_detail", pk=movie.pk)
+    else:
+        form = ReviewForm()
+
+    return render(
+        request,
+        "movie_detail.html",
+        {
+            "movie": movie,
+            "upcoming_sessions": upcoming_sessions,
+            "reviews": reviews,
+            "avg_rating": avg_rating,
+            "form": form,
+        },
+    )
