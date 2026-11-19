@@ -4,9 +4,11 @@ import uuid
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .forms import ProfileForm, RegisterForm
@@ -16,6 +18,17 @@ from .permissions import is_staff_or_cashier
 from django.db.models import Avg
 from .forms import ProfileForm, RegisterForm, ReviewForm
 from .models import Booking, Movie, Review, Seat, Session, SessionPrice, Ticket
+
+
+class StaffLoginView(LoginView):
+    def get_success_url(self):
+        redirect_url = self.get_redirect_url()
+        if redirect_url:
+            return redirect_url
+        if self.request.user.is_staff:
+            return reverse("admin:index")
+        return super().get_success_url()
+
 
 def index(request):
     # Берём только те сеансы, которые ещё не начались
