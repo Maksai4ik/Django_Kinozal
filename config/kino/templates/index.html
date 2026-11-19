@@ -63,6 +63,17 @@
       </div>
       <form class="home-filters" method="get" action="{% url 'index' %}">
         <label>
+          <span class="visually-hidden">Название фильма</span>
+          <input
+            class="input"
+            type="search"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Название фильма"
+            aria-label="Название фильма"
+          >
+        </label>
+        <label>
           <span class="visually-hidden">Дата сеанса</span>
           <select class="select" name="date" aria-label="Дата сеанса">
             {% for option in date_options %}
@@ -79,6 +90,23 @@
             {% for genre in genres %}
             <option value="{{ genre.pk }}"{% if genre.pk == selected_genre_id %} selected{% endif %}>{{ genre.name }}</option>
             {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span class="visually-hidden">Зал</span>
+          <select class="select" name="hall" aria-label="Зал">
+            <option value="">Все залы</option>
+            {% for hall in halls %}
+            <option value="{{ hall.pk }}"{% if hall.pk == selected_hall_id %} selected{% endif %}>{{ hall.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span class="visually-hidden">Сортировка афиши</span>
+          <select class="select" name="sort" aria-label="Сортировка афиши">
+            <option value="time"{% if selected_sort == "time" %} selected{% endif %}>По времени</option>
+            <option value="title"{% if selected_sort == "title" %} selected{% endif %}>По названию</option>
+            <option value="hall"{% if selected_sort == "hall" %} selected{% endif %}>По залу</option>
           </select>
         </label>
         <button class="btn btn-primary" type="submit">Найти сеанс</button>
@@ -117,6 +145,17 @@
       </article>
       {% endfor %}
     </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="pager" aria-label="Страницы афиши">
+      {% if page_obj.has_previous %}
+      <a href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Предыдущая страница">←</a>
+      {% endif %}
+      <span aria-current="page">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}" aria-label="Следующая страница">→</a>
+      {% endif %}
+    </nav>
+    {% endif %}
     {% else %}
     <div class="home-empty">
       <h3>На эту дату сеансов нет</h3>

@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Q
 from django.http import JsonResponse
@@ -18,6 +19,7 @@ from .forms import ProfileForm, RegisterForm, ReviewForm
 from .models import (
     Booking,
     Genre,
+    Hall,
     Movie,
     Review,
     Seat,
@@ -40,27 +42,50 @@ class StaffLoginView(LoginView):
 
 def index(request):
     now = timezone.now()
+    week_end = now + timedelta(days=7)
     genres = list(Genre.objects.order_by("name"))
     genre_by_id = {str(genre.pk): genre for genre in genres}
     selected_genre = genre_by_id.get(request.GET.get("genre", ""))
+    halls = list(
+        Hall.objects.filter(
+            sessions__starts_at__gte=now,
+            sessions__starts_at__lt=week_end,
+            sessions__status=Session.Status.ACTIVE,
+            sessions__movie__is_active=True,
+        )
+        .distinct()
+        .order_by("name")
+    )
+    hall_by_id = {str(hall.pk): hall for hall in halls}
+    selected_hall = hall_by_id.get(request.GET.get("hall", ""))
+    search_query = request.GET.get("q", "").strip()
+    sort_options = {
+        "time": ("starts_at", "pk"),
+        "title": ("movie__title", "starts_at", "pk"),
+        "hall": ("hall__name", "starts_at", "movie__title", "pk"),
+    }
+    selected_sort = request.GET.get("sort", "time")
+    if selected_sort not in sort_options:
+        selected_sort = "time"
 
-    sessions = list(
+    sessions = (
         Session.objects.filter(
             starts_at__gte=now,
-            starts_at__lt=now + timedelta(days=7),
+            starts_at__lt=week_end,
             status=Session.Status.ACTIVE,
             movie__is_active=True,
         )
         .select_related("movie", "hall")
         .prefetch_related("movie__genres", "prices")
-        .order_by("starts_at")
     )
     if selected_genre:
-        sessions = [
-            session
-            for session in sessions
-            if selected_genre in session.movie.genres.all()
-        ]
+        sessions = sessions.filter(movie__genres=selected_genre).distinct()
+    if selected_hall:
+        sessions = sessions.filter(hall=selected_hall)
+    if search_query:
+        sessions = sessions.filter(movie__title__icontains=search_query)
+
+    sessions = list(sessions.order_by(*sort_options[selected_sort]))
 
     available_dates = sorted({
         timezone.localtime(session.starts_at).date()
@@ -103,18 +128,28 @@ def index(request):
         for date in available_dates
     ]
 
-    showings = list(showings_by_movie.values())
+    all_showings = list(showings_by_movie.values())
     featured = next(
-        (showing for showing in showings if showing["movie"].backdrop),
-        showings[0] if showings else None,
+        (showing for showing in all_showings if showing["movie"].backdrop),
+        all_showings[0] if all_showings else None,
     )
+    page_obj = Paginator(all_showings, 20).get_page(request.GET.get("page"))
+    pagination_query = request.GET.copy()
+    pagination_query.pop("page", None)
+
     return render(
         request,
         "index.html",
         {
-            "showings": showings,
+            "showings": page_obj.object_list,
+            "page_obj": page_obj,
+            "pagination_query": pagination_query.urlencode(),
             "featured": featured,
             "genres": genres,
+            "halls": halls,
+            "selected_hall_id": selected_hall.pk if selected_hall else None,
+            "search_query": search_query,
+            "selected_sort": selected_sort,
             "date_options": date_options,
             "selected_date": selected_date.isoformat() if selected_date else "",
             "selected_genre_id": selected_genre.pk if selected_genre else None,

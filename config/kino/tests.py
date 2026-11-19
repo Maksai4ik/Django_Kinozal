@@ -107,6 +107,10 @@ class HomePageTests(TestCase):
         self.assertContains(response, self.drama_movie.title)
         self.assertContains(response, self.comedy_movie.title)
         self.assertEqual(len(response.context["showings"]), 2)
+        self.assertEqual(
+            [showing["movie"] for showing in response.context["showings"]],
+            [self.drama_movie, self.comedy_movie],
+        )
 
     def test_genre_filter_limits_movies(self):
         response = self.client.get(
@@ -117,6 +121,89 @@ class HomePageTests(TestCase):
         self.assertContains(response, self.drama_movie.title)
         self.assertNotContains(response, self.comedy_movie.title)
         self.assertEqual(len(response.context["showings"]), 1)
+
+    def test_title_search_limits_movies(self):
+        response = self.client.get(reverse("index"), {"q": "драма"})
+
+        self.assertContains(response, self.drama_movie.title)
+        self.assertNotContains(response, self.comedy_movie.title)
+        self.assertEqual(len(response.context["showings"]), 1)
+
+    def test_hall_filter_limits_movies(self):
+        other_hall = Hall.objects.create(
+            name="Другой зал",
+            rows_count=5,
+            seats_per_row=8,
+        )
+        Session.objects.create(
+            movie=self.drama_movie,
+            hall=other_hall,
+            starts_at=self.starts_at + timedelta(minutes=45),
+        )
+
+        response = self.client.get(
+            reverse("index"),
+            {"hall": other_hall.pk},
+        )
+
+        self.assertContains(response, self.drama_movie.title)
+        self.assertNotContains(response, self.comedy_movie.title)
+        self.assertEqual(len(response.context["showings"]), 1)
+
+    def test_title_sort_orders_movie_cards(self):
+        response = self.client.get(reverse("index"), {"sort": "title"})
+
+        titles = [showing["movie"].title for showing in response.context["showings"]]
+
+        self.assertEqual(titles, sorted(titles))
+
+    def test_hall_sort_orders_movie_cards_by_hall_name(self):
+        first_hall = Hall.objects.create(
+            name="А зал",
+            rows_count=5,
+            seats_per_row=8,
+        )
+        first_movie = self.create_movie("Фильм в первом зале", self.drama)
+        Session.objects.create(
+            movie=first_movie,
+            hall=first_hall,
+            starts_at=self.starts_at,
+        )
+
+        response = self.client.get(reverse("index"), {"sort": "hall"})
+
+        titles = [showing["movie"].title for showing in response.context["showings"]]
+
+        self.assertEqual(titles[0], first_movie.title)
+
+    def test_pagination_limits_cards_and_preserves_filters(self):
+        for number in range(21):
+            movie = self.create_movie(f"Дополнительный фильм {number:02d}", self.drama)
+            Session.objects.create(
+                movie=movie,
+                hall=self.hall,
+                starts_at=self.starts_at + timedelta(minutes=number + 60),
+            )
+
+        first_page = self.client.get(
+            reverse("index"),
+            {"sort": "title", "q": "Доп"},
+        )
+        self.assertEqual(len(first_page.context["showings"]), 20)
+        self.assertContains(
+            first_page,
+            "sort=title&amp;q=%D0%94%D0%BE%D0%BF&amp;page=2",
+        )
+
+        second_page = self.client.get(
+            reverse("index"),
+            {"sort": "title", "q": "Доп", "page": 2},
+        )
+        self.assertEqual(len(second_page.context["showings"]), 1)
+        self.assertContains(
+            second_page,
+            "sort=title&amp;q=%D0%94%D0%BE%D0%BF&amp;page=1",
+        )
 
     def test_movie_with_backdrop_is_featured(self):
         self.comedy_movie.backdrop.name = "backdrops/comedy.png"
