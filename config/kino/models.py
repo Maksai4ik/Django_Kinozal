@@ -49,6 +49,7 @@ class Movie(models.Model):
         "год выпуска", validators=[MinValueValidator(1900), MaxValueValidator(2100)])
     age_limit = models.PositiveSmallIntegerField("возрастное ограничение", choices=AGE_CHOICES, default=0)
     poster = models.ImageField("постер", upload_to="posters/", blank=True)
+    backdrop = models.ImageField("фоновое изображение", upload_to="backdrops/", blank=True)
     is_active = models.BooleanField("показывать в афише", default=True)
     genres = models.ManyToManyField(Genre, related_name="movies", verbose_name="жанры", blank=True)
     created_at = models.DateTimeField("создан", default=timezone.now, editable=False)

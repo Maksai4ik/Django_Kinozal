@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 
-from kino.demo_data import build, seat_category
+from kino.demo_data import MOVIE_ASSETS, build, seat_category
 from kino.models import (
     Booking,
     Genre,
@@ -49,12 +49,15 @@ class Command(BaseCommand):
 
         movies = []
         for title, description, duration, year, age, genre_names in data["movies"]:
+            assets = MOVIE_ASSETS.get(title, {})
             movie = Movie.objects.create(
                 title=title,
                 description=description,
                 duration_min=duration,
                 year=year,
                 age_limit=age,
+                poster=assets.get("poster", ""),
+                backdrop=assets.get("backdrop", ""),
             )
             movie.genres.set([genres[name] for name in genre_names])
             movies.append(movie)

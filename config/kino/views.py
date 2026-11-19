@@ -6,18 +6,24 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Avg, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 
-from .forms import ProfileForm, RegisterForm
-from .models import Booking, Seat, Session, SessionPrice, Ticket
-from .permissions import is_staff_or_cashier
-
-from django.db.models import Avg
 from .forms import ProfileForm, RegisterForm, ReviewForm
-from .models import Booking, Movie, Review, Seat, Session, SessionPrice, Ticket
+from .models import (
+    Booking,
+    Genre,
+    Movie,
+    Review,
+    Seat,
+    Session,
+    SessionPrice,
+    Ticket,
+)
+from .permissions import is_staff_or_cashier
 
 
 class StaffLoginView(LoginView):
@@ -31,9 +37,87 @@ class StaffLoginView(LoginView):
 
 
 def index(request):
-    # Берём только те сеансы, которые ещё не начались
-    sessions = Session.objects.filter(starts_at__gte=timezone.now()).order_by("starts_at")
-    return render(request, "index.html", {"sessions": sessions})
+    now = timezone.now()
+    genres = list(Genre.objects.order_by("name"))
+    genre_by_id = {str(genre.pk): genre for genre in genres}
+    selected_genre = genre_by_id.get(request.GET.get("genre", ""))
+
+    sessions = list(
+        Session.objects.filter(
+            starts_at__gte=now,
+            starts_at__lt=now + timedelta(days=7),
+            status=Session.Status.ACTIVE,
+            movie__is_active=True,
+        )
+        .select_related("movie", "hall")
+        .prefetch_related("movie__genres", "prices")
+        .order_by("starts_at")
+    )
+    if selected_genre:
+        sessions = [
+            session
+            for session in sessions
+            if selected_genre in session.movie.genres.all()
+        ]
+
+    available_dates = sorted({
+        timezone.localtime(session.starts_at).date()
+        for session in sessions
+    })
+    requested_date = parse_date(request.GET.get("date", ""))
+    selected_date = (
+        requested_date
+        if requested_date in available_dates
+        else (available_dates[0] if available_dates else None)
+    )
+
+    showings_by_movie = {}
+    if selected_date:
+        for session in sessions:
+            if timezone.localtime(session.starts_at).date() != selected_date:
+                continue
+            movie_id = session.movie_id
+            if movie_id not in showings_by_movie:
+                showings_by_movie[movie_id] = {
+                    "movie": session.movie,
+                    "sessions": [],
+                }
+            showings_by_movie[movie_id]["sessions"].append(session)
+
+    weekday_names = (
+        "Понедельник", "Вторник", "Среда", "Четверг",
+        "Пятница", "Суббота", "Воскресенье",
+    )
+    today = timezone.localdate()
+    date_options = [
+        {
+            "value": date.isoformat(),
+            "label": (
+                "Сегодня" if date == today
+                else "Завтра" if date == today + timedelta(days=1)
+                else f"{weekday_names[date.weekday()]}, {date:%d.%m}"
+            ),
+        }
+        for date in available_dates
+    ]
+
+    showings = list(showings_by_movie.values())
+    featured = next(
+        (showing for showing in showings if showing["movie"].backdrop),
+        showings[0] if showings else None,
+    )
+    return render(
+        request,
+        "index.html",
+        {
+            "showings": showings,
+            "featured": featured,
+            "genres": genres,
+            "date_options": date_options,
+            "selected_date": selected_date.isoformat() if selected_date else "",
+            "selected_genre_id": selected_genre.pk if selected_genre else None,
+        },
+    )
 
 
 def register(request):

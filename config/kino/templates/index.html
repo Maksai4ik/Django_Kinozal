@@ -1,18 +1,121 @@
 {% extends "base.html" %}
-{% load static %}
+{% block body_class %}home-body{% endblock %}
+{% block main_class %}home-main{% endblock %}
+{% block main_container_class %}home-container{% endblock %}
 {% block title %}Афиша{% endblock %}
 {% block content %}
-<p class="eyebrow">Сеансы на ближайшие 7 дней</p>
-<h1>Афиша</h1>
+<div class="home-page">
+  <section class="home-hero"{% if featured and featured.movie.backdrop %} style="--hero-poster: url('{{ featured.movie.backdrop.url }}')"{% endif %}>
+    <div class="home-hero__toolbar">
+      <p class="eyebrow">Большое кино. Близко, чем кажется.</p>
+    </div>
 
-<div class="sortbar">
-  <span class="loader" id="loader" hidden>Загрузка…</span>
-  <span class="right"></span>
-  <label class="small" for="id_sort">Сортировка:</label>
-  {{ form.sort }}
-</div>
-<div id="results-wrap">
+    {% if featured %}
+    <div class="home-feature">
+      <a class="home-poster home-poster--feature{% if not featured.movie.poster %} home-poster--placeholder{% endif %}" href="{% url 'movie_detail' featured.movie.pk %}" aria-label="Подробнее о фильме «{{ featured.movie.title }}»">
+        {% if featured.movie.poster %}
+        <img src="{{ featured.movie.poster.url }}" alt="Постер фильма «{{ featured.movie.title }}»">
+        {% else %}
+        <span class="home-poster__title">{{ featured.movie.title }}</span>
+        <span class="home-poster__year">{{ featured.movie.year }}</span>
+        {% endif %}
+      </a>
+      <div class="home-feature__content">
+        <span class="home-pill">СЕАНС ДНЯ</span>
+        <h1>{{ featured.movie.title }}</h1>
+        <p class="home-feature__meta">
+          {{ featured.movie.age_limit }}+ &nbsp;·&nbsp;
+          {% for genre in featured.movie.genres.all %}{{ genre.name }}{% if not forloop.last %}, {% endif %}{% empty %}Без жанра{% endfor %}
+          &nbsp;·&nbsp; {{ featured.movie.duration_text }}
+        </p>
+        <p class="home-feature__description">{{ featured.movie.description|default:"Выберите сеанс и проведите вечер за хорошим кино."|truncatewords:30 }}</p>
+        <p class="home-feature__next">
+          Ближайший сеанс: <strong>{{ featured.sessions.0.starts_at|time:"H:i" }}</strong>
+          <span>· {{ featured.sessions.0.hall.name }}</span>
+        </p>
+        <div class="home-feature__actions">
+          <a class="btn btn-primary" href="{% url 'session_detail' featured.sessions.0.pk %}">Выбрать сеанс</a>
+          <a class="btn btn-secondary" href="{% url 'movie_detail' featured.movie.pk %}">Подробнее о фильме</a>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="home-feature home-feature--empty">
+      <div>
+        <span class="home-pill">КИНОЗАЛ</span>
+        <h1>Скоро на экранах</h1>
+        <p>Расписание ближайших сеансов пока не опубликовано.</p>
+      </div>
+    </div>
+    {% endif %}
+  </section>
 
+  <section class="home-listing" id="afisha">
+    <div class="home-section-heading">
+      <div>
+        <p class="eyebrow">СЕАНСЫ НА БЛИЖАЙШИЕ 7 ДНЕЙ</p>
+        <h2>Сейчас в кино</h2>
+      </div>
+      <form class="home-filters" method="get" action="{% url 'index' %}">
+        <label>
+          <span class="visually-hidden">Дата сеанса</span>
+          <select class="select" name="date" aria-label="Дата сеанса">
+            {% for option in date_options %}
+            <option value="{{ option.value }}"{% if option.value == selected_date %} selected{% endif %}>{{ option.label }}</option>
+            {% empty %}
+            <option value="">Нет ближайших сеансов</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span class="visually-hidden">Жанр фильма</span>
+          <select class="select" name="genre" aria-label="Жанр фильма">
+            <option value="">Все жанры</option>
+            {% for genre in genres %}
+            <option value="{{ genre.pk }}"{% if genre.pk == selected_genre_id %} selected{% endif %}>{{ genre.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="btn btn-primary" type="submit">Найти сеанс</button>
+      </form>
+    </div>
+
+    {% if showings %}
+    <div class="home-movie-grid">
+      {% for showing in showings %}
+      <article class="home-movie-card">
+        <a class="home-poster{% if not showing.movie.poster %} home-poster--placeholder{% endif %}" href="{% url 'movie_detail' showing.movie.pk %}" aria-label="Подробнее о фильме «{{ showing.movie.title }}»">
+          {% if showing.movie.poster %}
+          <img src="{{ showing.movie.poster.url }}" alt="Постер фильма «{{ showing.movie.title }}»">
+          {% else %}
+          <span class="home-poster__title">{{ showing.movie.title }}</span>
+          <span class="home-poster__year">{{ showing.movie.year }}</span>
+          {% endif %}
+          <span class="home-poster__age">{{ showing.movie.age_limit }}+</span>
+        </a>
+        <div class="home-movie-card__body">
+          <h3><a href="{% url 'movie_detail' showing.movie.pk %}">{{ showing.movie.title }}</a></h3>
+          <p class="home-movie-card__meta">
+            {% for genre in showing.movie.genres.all %}{{ genre.name }}{% if not forloop.last %} · {% endif %}{% empty %}Без жанра{% endfor %}
+            · {{ showing.movie.duration_text }}
+          </p>
+          <div class="home-showtimes" aria-label="Сеансы фильма {{ showing.movie.title }}">
+            {% for session in showing.sessions %}
+            <a href="{% url 'session_detail' session.pk %}" title="{{ session.hall.name }}">
+              {{ session.starts_at|time:"H:i" }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="home-empty">
+      <h3>На эту дату сеансов нет</h3>
+      <p>Выберите другую дату или жанр — мы подберём подходящий фильм.</p>
+    </div>
+    {% endif %}
+  </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/afisha.js' %}" defer></script>{% endblock %}
