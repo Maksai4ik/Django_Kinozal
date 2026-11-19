@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="authbg">
+  <div class="authcard">
+    <div class="seg"><a class="on" href="{% url 'login' %}">Вход</a><a href="{% url 'register' %}">Регистрация</a></div>
+    <h1>С возвращением</h1>
+    <p class="small text-center">Большое кино начинается с вашего аккаунта</p>
+    <form method="post" data-validate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-error" role="alert"><span class="ic" aria-hidden="true">!</span><div>{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div></div>{% endif %}
+      {{ form.as_p }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn btn-primary btn-block" type="submit">Войти</button>
+    </form>
+    <p class="small text-center mt-16">Нет аккаунта? <a href="{% url 'register' %}">Зарегистрироваться</a></p>
+  </div>
+</div>
+{% endblock %}
+

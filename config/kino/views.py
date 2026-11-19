@@ -33,7 +33,7 @@ def register(request):
             return redirect("index")
     else:
         form = RegisterForm()
-    return render(request, "registration/register.html", {"form": form})
+    return render(request, "register.html", {"form": form})
 
 
 @login_required
@@ -46,7 +46,7 @@ def profile(request):
             return redirect("profile")
     else:
         form = ProfileForm(instance=request.user)
-    return render(request, "registration/profile.html", {"form": form})
+    return render(request, "profile.html", {"form": form})
 
 
 def session_detail(request, pk):
@@ -290,7 +290,7 @@ def pay_booking(request, pk):
     )
     return redirect("my_bookings")
 
- def movie_detail(request, pk):
+def movie_detail(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
 
     # Ближайшие сеансы этого фильма, которые ещё не начались

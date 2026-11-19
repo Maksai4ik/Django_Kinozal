@@ -30,14 +30,12 @@
                         </button>
                     {% else %}
                         <!-- Отправляем запрос на бронь этого места на этом сеансе -->
-    <form method="post" action="{% url 'book_seat' session.id item.seat.id %}" style="display:inline;">
-        <!-- Защита от подделки запросов — обязательна для отправки форм -->
-        {% csrf_token %}
-        <!-- Обычная кнопка отправки формы -->
-        <button type="submit">
-            {{ item.seat.number }} ({{ item.seat.get_category_display }})
-        </button>
-    </form>
+                        <form method="post" action="{% url 'book_seat' session.id item.seat.id %}" style="display:inline;">
+                        {% csrf_token %}->
+                        <button type="submit">
+                            {{ item.seat.number }} ({{ item.seat.get_category_display }})
+                        </button>
+                         </form>
                     {% endif %}
                 {% endfor %}
             </div>

@@ -9,6 +9,14 @@ class RegisterForm(UserCreationForm):
     # Добавляем поле электронной почты поверх стандартных полей регистрации
     email = forms.EmailField(label="Электронная почта", required=False)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].help_text = ""
+        self.fields["password1"].label = "Пароль"
+        self.fields["password1"].help_text = ""
+        self.fields["password2"].label = "Подтверждение пароля"
+        self.fields["password2"].help_text = ""
+
     class Meta:
         model = User
         fields = ("username", "email")
