@@ -86,13 +86,14 @@
       <p id="availability-status" class="hall-status" role="status">
         Схема обновляется каждые 5 секунд.
       </p>
+      <p id="availability-loader" class="loader" role="status" hidden>Обновляем схему зала…</p>
     </div>
   </div>
 
   <aside class="panel">
     <div class="film-mini">
       {% if session.movie.poster %}
-      <img src="{{ session.movie.poster.url }}" alt="Постер фильма «{{ session.movie.title }}»">
+      <img src="{{ session.movie.poster.url }}" alt="Постер фильма «{{ session.movie.title }}»" width="300" height="450">
       {% endif %}
       <div>
         <strong>{{ session.movie.title }}</strong>
@@ -125,6 +126,7 @@
   const form = document.getElementById("seat-form");
   const seats = document.querySelectorAll("#seat-map [data-seat-id]");
   const availabilityStatus = document.getElementById("availability-status");
+  const availabilityLoader = document.getElementById("availability-loader");
   const selectionStatus = document.getElementById("selection-status");
   const hallMessage = document.getElementById("hall-message");
   const selectedList = document.getElementById("selected-list");
@@ -204,6 +206,7 @@
       return;
     }
     refreshing = true;
+    availabilityLoader.hidden = false;
     try {
       const response = await fetch(availabilityUrl, {
         headers: { "Accept": "application/json" },
@@ -228,6 +231,7 @@
       console.error(error);
     } finally {
       refreshing = false;
+      availabilityLoader.hidden = true;
     }
   }
 

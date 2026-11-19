@@ -61,9 +61,9 @@
         {{ sale.movie_title }}<br>
         <span class="small">{{ sale.revenue|floatformat:2 }} ₽</span>
       </span>
-      <div class="track" role="img" aria-label="{{ sale.ticket_count }} билетов">
-        <div class="fill" style="width: {{ sale.bar_width }}%"></div>
-      </div>
+      <progress class="track" max="100" value="{{ sale.bar_width }}" aria-label="{{ sale.ticket_count }} билетов">
+        {{ sale.bar_width }}%
+      </progress>
       <strong>{{ sale.ticket_count }}</strong>
     </div>
     {% endfor %}

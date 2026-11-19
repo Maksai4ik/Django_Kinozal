@@ -25,6 +25,7 @@ from .models import (
     Session,
     SessionPrice,
     Ticket,
+    UserProfile,
 )
 
 
@@ -212,8 +213,115 @@ class AccountTests(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.email, "viewer@example.com")
 
+    def test_profile_saves_optional_phone(self):
+        user = User.objects.create_user(
+            username="phone_viewer",
+            email="viewer@example.com",
+            password="StrongTestPassword123!",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "username": user.username,
+                "first_name": "",
+                "last_name": "",
+                "email": user.email,
+                "phone": "+7 (900) 123-45-67",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.assertEqual(
+            UserProfile.objects.get(user=user).phone,
+            "+7 (900) 123-45-67",
+        )
+        response = self.client.get(reverse("profile"))
+        self.assertEqual(
+            response.context["form"]["phone"].value(),
+            "+7 (900) 123-45-67",
+        )
+
+    def test_profile_rejects_malformed_phone(self):
+        user = User.objects.create_user(
+            username="invalid_phone_viewer",
+            email="viewer@example.com",
+            password="StrongTestPassword123!",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "username": user.username,
+                "first_name": "",
+                "last_name": "",
+                "email": user.email,
+                "phone": "not a phone",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("phone", response.context["form"].errors)
+        self.assertFalse(UserProfile.objects.filter(user=user).exists())
+
+    def test_profile_phone_is_optional(self):
+        user = User.objects.create_user(
+            username="optional_phone_viewer",
+            email="viewer@example.com",
+            password="StrongTestPassword123!",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "username": user.username,
+                "first_name": "",
+                "last_name": "",
+                "email": user.email,
+                "phone": "",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.assertEqual(UserProfile.objects.get(user=user).phone, "")
+
+
+class AboutPageTests(TestCase):
+    def test_about_page_renders_from_named_route(self):
+        response = self.client.get(reverse("about"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<h1>О кинотеатре</h1>", html=True)
+
+
+class HeaderNavigationTests(TestCase):
+    def test_authenticated_header_has_one_bookings_link_and_no_afisha_link(self):
+        user = User.objects.create_user(username="header_viewer")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("index"))
+        html = response.content.decode()
+
+        self.assertEqual(
+            html.count(f'href="{reverse("my_bookings")}"'),
+            1,
+        )
+        self.assertNotIn(">Афиша</a>", html)
+
 
 class LoginRedirectTests(TestCase):
+    def test_protected_pages_redirect_to_the_project_login_route(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('profile')}",
+            fetch_redirect_response=False,
+        )
+
     def test_staff_login_redirects_to_admin(self):
         User.objects.create_user(
             username="staff",

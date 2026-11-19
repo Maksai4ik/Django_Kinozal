@@ -6,9 +6,10 @@
     <h1>Служебная страница кассира</h1>
     <p><a href="{% url 'index' %}">← На главную</a></p>
 
-    <form method="get" style="margin-bottom: 18px;">
+    <form method="get" class="cashier-filters">
+        <div class="field">
         <label for="session-select">Сеанс:</label>
-        <select id="session-select" name="session">
+        <select id="session-select" name="session" class="select">
             <option value="">Все сеансы</option>
             {% for s in sessions %}
                 <option
@@ -21,18 +22,21 @@
                 </option>
             {% endfor %}
         </select>
-
-        <label for="search-input" style="margin-left: 10px;">Поиск (№ брони, логин или № билета):</label>
-        <input id="search-input" type="text" name="q" value="{{ search_query }}">
-
-        <button type="submit">Показать</button>
-        <a href="{% url 'cashier_bookings' %}" style="margin-left: 8px;">Сбросить</a>
+        </div>
+        <div class="field">
+                <label for="search-input">Поиск (№ брони, логин или № билета):</label>
+                <input id="search-input" class="input" type="text" name="q" value="{{ search_query }}">
+        </div>
+        <div class="cashier-filter-actions">
+                <button class="btn btn-primary" type="submit">Показать</button>
+                <a class="cashier-reset" href="{% url 'cashier_bookings' %}">Сбросить</a>
+        </div>
     </form>
 
     {% if bookings %}
         <ul>
             {% for booking in bookings %}
-                <li data-booking-row style="margin-bottom: 14px;">
+                <li class="booking-row" data-booking-row>
                     Бронь №{{ booking.pk }}:
                     <strong>{{ booking.session.movie.title }}</strong> —
                     {{ booking.session.hall.name }},
@@ -53,15 +57,15 @@
                             data-expires-at="{{ booking.expires_at|date:'c' }}"
                             data-server-now="{{ server_now|date:'c' }}"
                         >рассчитываем…</span>
-                        <div data-booking-actions>
-                            <form method="post" action="{% url 'pay_booking' booking.pk %}" style="display:inline;">
+                        <div class="booking-actions" data-booking-actions>
+                            <form method="post" action="{% url 'pay_booking' booking.pk %}" class="inline">
                                 {% csrf_token %}
                                 <input type="hidden" name="channel" value="cashbox">
-                                <button type="submit">Выкупить на кассе</button>
+                                <button class="btn btn-primary btn-sm" type="submit">Выкупить на кассе</button>
                             </form>
-                            <form method="post" action="{% url 'cancel_booking' booking.pk %}" style="display:inline;">
+                            <form method="post" action="{% url 'cancel_booking' booking.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit">Отменить бронь</button>
+                                <button class="btn btn-danger btn-sm" type="submit">Отменить бронь</button>
                             </form>
                         </div>
                     {% endif %}

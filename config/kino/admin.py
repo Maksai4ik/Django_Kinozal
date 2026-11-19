@@ -10,6 +10,7 @@ from .models import (
     Session,
     SessionPrice,
     Ticket,
+    UserProfile,
 )
 
 # Регистрируем все модели, чтобы они появились в админке
@@ -28,3 +29,4 @@ admin.site.register(SessionPrice)
 admin.site.register(Booking)
 admin.site.register(Ticket)
 admin.site.register(Review)
+admin.site.register(UserProfile)

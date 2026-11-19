@@ -8,6 +8,7 @@ from kino import views
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", views.index, name="index"),  # Главная страница
+    path("about/", views.about, name="about"),
     path("login/", views.StaffLoginView.as_view(template_name="login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("register/", views.register, name="register"),

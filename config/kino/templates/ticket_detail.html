@@ -3,8 +3,8 @@
 {% block title %}Билет {{ ticket.number }}{% endblock %}
 
 {% block content %}
-<div class="actions" style="margin-bottom: 20px;">
-  <a class="btn btn-secondary" href="{{ back_url }}">Назад</a>
+<div class="actions ticket-actions">
+  <a class="btn btn-secondary" href="{% url back_url_name %}">Назад</a>
   <button class="btn btn-primary" type="button" onclick="window.print()">Распечатать билет</button>
 </div>
 

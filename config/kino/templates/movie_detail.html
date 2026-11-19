@@ -5,13 +5,16 @@
 {% block title %}{{ movie.title }}{% endblock %}
 {% block content %}
 <div class="movie-detail-page">
-  <section class="movie-detail-hero"{% if movie.backdrop %} style="--movie-backdrop: url('{{ movie.backdrop.url }}')"{% endif %}>
+  <section class="movie-detail-hero">
+    {% if movie.backdrop %}
+    <img class="movie-detail-hero__backdrop" src="{{ movie.backdrop.url }}" alt="" aria-hidden="true" width="1600" height="900">
+    {% endif %}
     <div class="movie-detail-hero__inner">
       <a class="movie-detail-back" href="{% url 'index' %}">← <span>Назад к афише</span></a>
       <div class="movie-detail-feature">
         <div class="movie-detail-poster{% if not movie.poster %} movie-detail-poster--placeholder{% endif %}">
           {% if movie.poster %}
-          <img src="{{ movie.poster.url }}" alt="Постер фильма «{{ movie.title }}»">
+          <img src="{{ movie.poster.url }}" alt="Постер фильма «{{ movie.title }}»" width="300" height="450">
           {% else %}
           <span>{{ movie.title }}</span>
           <small>{{ movie.year }}</small>
@@ -96,7 +99,7 @@
             <p>Вы можете изменить или удалить свой отзыв в списке.</p>
             {% else %}
             <h3>Поделитесь впечатлением</h3>
-            <form method="post" class="movie-review-form">
+            <form method="post" class="movie-review-form" data-validate>
               {% csrf_token %}
               {{ form.as_p }}
               <button class="btn btn-primary" type="submit">Оставить отзыв</button>

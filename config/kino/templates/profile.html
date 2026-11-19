@@ -6,7 +6,7 @@
 <div class="authbg">
   <div class="authcard">
     <h1>Мой профиль</h1>
-    <form method="post">
+    <form method="post" data-validate>
       {% csrf_token %}
       {{ form.as_p }}
       <button class="btn btn-primary btn-block" type="submit">Сохранить профиль</button>

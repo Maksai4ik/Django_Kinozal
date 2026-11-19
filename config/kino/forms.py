@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from django import forms
@@ -6,7 +7,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 
-from .models import Movie, Review
+from .models import Movie, Review, UserProfile
 
 
 MAX_POSTER_SIZE = 2 * 1024 * 1024
@@ -86,8 +87,10 @@ class RegisterForm(UserCreationForm):
         self.fields["username"].help_text = ""
         self.fields["password1"].label = "Пароль"
         self.fields["password1"].help_text = ""
+        self.fields["password1"].widget.attrs["minlength"] = 8
         self.fields["password2"].label = "Подтверждение пароля"
         self.fields["password2"].help_text = ""
+        self.fields["password2"].widget.attrs["minlength"] = 8
 
     class Meta:
         model = User
@@ -104,6 +107,12 @@ class ProfileForm(forms.ModelForm):
         max_length=254,
         required=True,
     )
+    phone = forms.CharField(
+        label="Телефон",
+        required=False,
+        max_length=32,
+        widget=forms.TextInput(attrs={"type": "tel", "autocomplete": "tel"}),
+    )
 
     class Meta:
         model = User
@@ -114,6 +123,31 @@ class ProfileForm(forms.ModelForm):
             "last_name": "Фамилия",
             "email": "Электронная почта",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["phone"].initial = (
+                UserProfile.objects.filter(user=self.instance)
+                .values_list("phone", flat=True)
+                .first()
+                or ""
+            )
+
+    def clean_phone(self):
+        phone = self.cleaned_data["phone"].strip()
+        if not phone:
+            return phone
+
+        if not re.fullmatch(r"\+?[\d\s().-]+", phone):
+            raise ValidationError(
+                "Введите телефон, используя цифры, пробелы, скобки, дефис и знак +."
+            )
+
+        digits = re.sub(r"\D", "", phone)
+        if not 10 <= len(digits) <= 15:
+            raise ValidationError("Телефон должен содержать от 10 до 15 цифр.")
+        return phone
 
 
 class AccountPasswordChangeForm(PasswordChangeForm):
@@ -139,5 +173,5 @@ class ReviewForm(forms.ModelForm):
             "text": "Текст отзыва",
         }
         widgets = {
-            "text": forms.Textarea(attrs={"rows": 3}),
+            "text": forms.Textarea(attrs={"rows": 3, "maxlength": 1000}),
         }

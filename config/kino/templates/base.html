@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Афиша{% endblock %} — КИНОЗАЛ</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -13,30 +14,18 @@
       <svg viewBox="0 0 22 20" aria-hidden="true"><polygon points="0,0 22,0 11,20" fill="#fff"/></svg>КИНОЗАЛ
     </a>
     <nav class="nav" id="site-nav" aria-label="Основное меню">
-      {% for item in nav_items %}<a href="{{ item.url }}"{% if item.active %} class="active" aria-current="page"{% endif %}>{{ item.title }}</a>{% endfor %}
-      <div class="nav-extra">
-        {% if user.is_authenticated %}
+      <a href="{% url 'about' %}">О кинотеатре</a>
+      {% if user.is_authenticated %}
         {% if user.is_staff %}<a href="{% url 'sales_report' %}">Отчёты</a>{% endif %}
-        <a href="{% url 'profile' %}">Мой профиль</a>
+        <a href="{% url 'profile' %}">Профиль</a>
         <a href="{% url 'my_bookings' %}">Мои брони</a>
-        <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="linkbtn" type="submit">Выйти ({{ user.get_username }})</button></form>
+        <b class="nav-user">{{ user.get_username }}</b>
+        <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="linkbtn" type="submit">Выйти</button></form>
         {% else %}
         <a href="{% url 'login' %}">Войти</a>
         <a href="{% url 'register' %}">Регистрация</a>
-        {% endif %}
-      </div>
-    </nav>
-    <div class="user">
-      {% if user.is_authenticated %}
-      {% if user.is_staff %}<a href="{% url 'sales_report' %}">Отчёты</a>{% endif %}
-      <a href="{% url 'profile' %}">Профиль</a>
-      <a href="{% url 'my_bookings' %}">Мои брони</a>
-      <b>{{ user.get_username }}</b>
-      <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="linkbtn" type="submit">Выйти</button></form>
-      {% else %}
-      <a class="btn btn-primary btn-sm" href="{% url 'login' %}">Войти</a>
       {% endif %}
-    </div>
+    </nav>
     <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Открыть меню">☰</button>
   </div>
 </header>
@@ -118,6 +107,97 @@
 
     updateCountdown();
     window.setInterval(updateCountdown, 1000);
+  });
+
+  const header = document.getElementById("site-header");
+  const burger = document.getElementById("burger");
+  if (header && burger) {
+    const closeMenu = () => {
+      header.classList.remove("open");
+      burger.setAttribute("aria-expanded", "false");
+      burger.setAttribute("aria-label", "Открыть меню");
+    };
+
+    burger.addEventListener("click", () => {
+      const isOpen = header.classList.toggle("open");
+      burger.setAttribute("aria-expanded", String(isOpen));
+      burger.setAttribute("aria-label", isOpen ? "Закрыть меню" : "Открыть меню");
+    });
+
+    header.querySelectorAll(".nav a").forEach((link) => {
+      link.addEventListener("click", closeMenu);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    });
+  }
+
+  document.querySelectorAll("form[data-validate]").forEach((form) => {
+    const fields = Array.from(form.elements).filter(
+      (field) => field.willValidate && field.name
+    );
+    form.noValidate = true;
+
+    const validateField = (field) => {
+      const value = field.value.trim();
+      let message = "";
+
+      if (field.required && !value) {
+        message = "Заполните это поле.";
+      } else if (value && field.type === "email" && field.validity.typeMismatch) {
+        message = "Введите адрес электронной почты в правильном формате.";
+      } else if (value && field.type === "tel") {
+        const digits = value.replace(/\D/g, "");
+        if (!/^\+?[\d\s().-]+$/.test(value) || digits.length < 10 || digits.length > 15) {
+          message = "Введите телефон, содержащий от 10 до 15 цифр.";
+        }
+      } else if (value && field.minLength > 0 && value.length < field.minLength) {
+        message = `Введите не менее ${field.minLength} символов.`;
+      } else if (value && field.maxLength >= 0 && value.length > field.maxLength) {
+        message = `Введите не более ${field.maxLength} символов.`;
+      }
+
+      let error = field.parentElement.querySelector("[data-client-error]");
+      if (message && !error) {
+        error = document.createElement("span");
+        error.className = "client-error";
+        error.dataset.clientError = "";
+        error.id = `${field.id || field.name}-client-error`;
+        field.parentElement.appendChild(error);
+      }
+      if (error) {
+        error.textContent = message;
+        error.hidden = !message;
+        field.setAttribute("aria-describedby", error.id);
+      }
+      field.setAttribute("aria-invalid", String(Boolean(message)));
+      return !message;
+    };
+
+    fields.forEach((field) => {
+      field.addEventListener("input", () => {
+        if (field.dataset.validationTouched) {
+          validateField(field);
+        }
+      });
+      field.addEventListener("blur", () => {
+        field.dataset.validationTouched = "true";
+        validateField(field);
+      });
+    });
+
+    form.addEventListener("submit", (event) => {
+      const invalidFields = fields.filter((field) => {
+        field.dataset.validationTouched = "true";
+        return !validateField(field);
+      });
+      if (invalidFields.length) {
+        event.preventDefault();
+        invalidFields[0].focus();
+      }
+    });
   });
 })();
 </script>

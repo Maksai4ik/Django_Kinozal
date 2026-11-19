@@ -9,7 +9,7 @@
     {% if bookings %}
         <ul>
             {% for booking in bookings %}
-                <li data-booking-row style="margin-bottom: 14px;">
+                <li class="booking-row" data-booking-row>
                     Бронь №{{ booking.pk }}:
                     <strong>{{ booking.session.movie.title }}</strong> —
                     {{ booking.session.hall.name }},
@@ -29,14 +29,14 @@
                             data-expires-at="{{ booking.expires_at|date:'c' }}"
                             data-server-now="{{ server_now|date:'c' }}"
                         >рассчитываем…</span>
-                        <div data-booking-actions>
-                            <form method="post" action="{% url 'pay_booking' booking.pk %}" style="display:inline;">
+                        <div class="booking-actions" data-booking-actions>
+                            <form method="post" action="{% url 'pay_booking' booking.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit">Выкупить билет</button>
+                                <button class="btn btn-primary btn-sm" type="submit">Выкупить билет</button>
                             </form>
-                            <form method="post" action="{% url 'cancel_booking' booking.pk %}" style="display:inline;">
+                            <form method="post" action="{% url 'cancel_booking' booking.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit">Отменить бронь</button>
+                                <button class="btn btn-danger btn-sm" type="submit">Отменить бронь</button>
                             </form>
                         </div>
                     {% endif %}

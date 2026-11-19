@@ -38,6 +38,22 @@ class Genre(models.Model):
         return self.name
 
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="kino_profile",
+    )
+    phone = models.CharField("телефон", max_length=32, blank=True)
+
+    class Meta:
+        verbose_name = "профиль пользователя"
+        verbose_name_plural = "профили пользователей"
+
+    def __str__(self):
+        return f"Профиль пользователя {self.user}"
+
+
 class Movie(models.Model):
     AGE_CHOICES = [(0, "0+"), (6, "6+"), (12, "12+"), (16, "16+"), (18, "18+")]
 

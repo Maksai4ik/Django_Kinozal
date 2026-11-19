@@ -5,7 +5,10 @@
 {% block title %}Афиша{% endblock %}
 {% block content %}
 <div class="home-page">
-  <section class="home-hero"{% if featured and featured.movie.backdrop %} style="--hero-poster: url('{{ featured.movie.backdrop.url }}')"{% endif %}>
+  <section class="home-hero">
+    {% if featured and featured.movie.backdrop %}
+    <img class="home-hero__backdrop" src="{{ featured.movie.backdrop.url }}" alt="" aria-hidden="true" width="1600" height="900">
+    {% endif %}
     <div class="home-hero__toolbar">
       <p class="eyebrow">Большое кино. Близко, чем кажется.</p>
     </div>
@@ -14,7 +17,7 @@
     <div class="home-feature">
       <a class="home-poster home-poster--feature{% if not featured.movie.poster %} home-poster--placeholder{% endif %}" href="{% url 'movie_detail' featured.movie.pk %}" aria-label="Подробнее о фильме «{{ featured.movie.title }}»">
         {% if featured.movie.poster %}
-        <img src="{{ featured.movie.poster.url }}" alt="Постер фильма «{{ featured.movie.title }}»">
+        <img src="{{ featured.movie.poster.url }}" alt="Постер фильма «{{ featured.movie.title }}»" width="300" height="450">
         {% else %}
         <span class="home-poster__title">{{ featured.movie.title }}</span>
         <span class="home-poster__year">{{ featured.movie.year }}</span>
@@ -119,7 +122,7 @@
       <article class="home-movie-card">
         <a class="home-poster{% if not showing.movie.poster %} home-poster--placeholder{% endif %}" href="{% url 'movie_detail' showing.movie.pk %}" aria-label="Подробнее о фильме «{{ showing.movie.title }}»">
           {% if showing.movie.poster %}
-          <img src="{{ showing.movie.poster.url }}" alt="Постер фильма «{{ showing.movie.title }}»">
+          <img src="{{ showing.movie.poster.url }}" alt="Постер фильма «{{ showing.movie.title }}»" width="300" height="450" loading="lazy">
           {% else %}
           <span class="home-poster__title">{{ showing.movie.title }}</span>
           <span class="home-poster__year">{{ showing.movie.year }}</span>

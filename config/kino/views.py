@@ -38,6 +38,7 @@ from .models import (
     Session,
     SessionPrice,
     Ticket,
+    UserProfile,
 )
 from .permissions import is_staff_or_cashier
 
@@ -195,12 +196,20 @@ def register(request):
     return render(request, "register.html", {"form": form})
 
 
+def about(request):
+    return render(request, "about.html")
+
+
 @login_required
 def profile(request):
     if request.method == "POST":
         form = ProfileForm(request.POST, instance=request.user)
         if form.is_valid():
-            form.save()
+            user = form.save()
+            UserProfile.objects.update_or_create(
+                user=user,
+                defaults={"phone": form.cleaned_data["phone"]},
+            )
             messages.success(request, "Профиль обновлён")
             return redirect("profile")
     else:
@@ -641,7 +650,7 @@ def ticket_detail(request, pk):
         "ticket_detail.html",
         {
             "ticket": ticket,
-            "back_url": reverse("cashier_bookings" if cashier else "my_bookings"),
+            "back_url_name": "cashier_bookings" if cashier else "my_bookings",
         },
     )
 
