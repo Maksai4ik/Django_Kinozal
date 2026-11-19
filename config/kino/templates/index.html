@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Афиша - Кинозал{% endblock %}
+
+{% block content %}
+    <h1 class="page-title">Сейчас в кино</h1>
+    
+    <div class="movie-grid">
+        {% for session in sessions %}
+            <article class="movie-card">
+                <!-- Проверяем, есть ли постер, если нет — выводим заглушку -->
+                {% if session.movie.poster %}
+                    <img src="{{ session.movie.poster.url }}" alt="{{ session.movie.title }}" class="poster-img">
+                {% else %}
+                    <div class="no-poster">Нет постера</div>
+                {% endif %}
+                
+                <div class="movie-info">
+                    <h3>{{ session.movie.title }}</h3>
+                    <p class="meta">{{ session.movie.age_limit }}+ · {{ session.movie.duration }} мин</p>
+                    <p class="time">{{ session.start_time|date:"d.m, H:i" }} · {{ session.hall.name }}</p>
+                    <div class="price">от {{ session.base_price }} ₽</div>
+                    <!-- Ссылка пока пустая, сделаем ее рабочей на следующем занятии -->
+                    <a href="#" class="btn">Выбрать места</a>
+                </div>
+            </article>
+        {% empty %}
+            <p>Пока сеансов нет. Добавьте их через админку.</p>
+        {% endfor %}
+    </div>
+{% endblock %}
