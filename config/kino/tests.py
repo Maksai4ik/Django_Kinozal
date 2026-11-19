@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 
+from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
@@ -123,6 +124,11 @@ class RegisterFormTests(SimpleTestCase):
         )
         for field_name in ("username", "password1", "password2"):
             self.assertEqual(form.fields[field_name].help_text, "")
+
+
+class AdminRegistrationTests(SimpleTestCase):
+    def test_session_prices_are_registered_in_admin(self):
+        self.assertTrue(admin.site.is_registered(SessionPrice))
 
 
 class AccountTests(TestCase):
