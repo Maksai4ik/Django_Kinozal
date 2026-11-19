@@ -1,12 +1,16 @@
+import os
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
-from .forms import RegisterForm
+from .forms import MAX_POSTER_SIZE, MovieAdminForm, RegisterForm
 from .models import (
     Booking,
     Genre,
@@ -17,6 +21,93 @@ from .models import (
     SessionPrice,
     Ticket,
 )
+
+
+class MoviePosterValidationTests(TestCase):
+    @staticmethod
+    def create_image(format_name):
+        image_buffer = BytesIO()
+        Image.new("RGB", (4, 4), color="blue").save(
+            image_buffer,
+            format=format_name,
+        )
+        return image_buffer.getvalue()
+
+    @staticmethod
+    def form_data():
+        return {
+            "title": "Проверка постера",
+            "duration_min": "100",
+            "year": "2026",
+            "age_limit": "0",
+            "is_active": "on",
+            "genres": [],
+        }
+
+    def test_accepts_jpeg_and_png_posters(self):
+        for format_name, extension, content_type in (
+            ("JPEG", ".jpg", "image/jpeg"),
+            ("PNG", ".png", "image/png"),
+        ):
+            with self.subTest(format=format_name):
+                upload = SimpleUploadedFile(
+                    f"poster{extension}",
+                    self.create_image(format_name),
+                    content_type=content_type,
+                )
+                form = MovieAdminForm(
+                    data=self.form_data(),
+                    files={"poster": upload},
+                )
+
+                self.assertTrue(form.is_valid(), form.errors)
+
+    def test_rejects_other_image_formats_and_mismatched_extensions(self):
+        uploads = (
+            SimpleUploadedFile(
+                "poster.gif",
+                self.create_image("GIF"),
+                content_type="image/gif",
+            ),
+            SimpleUploadedFile(
+                "poster.png",
+                self.create_image("JPEG"),
+                content_type="image/jpeg",
+            ),
+        )
+
+        for upload in uploads:
+            with self.subTest(name=upload.name):
+                form = MovieAdminForm(
+                    data=self.form_data(),
+                    files={"poster": upload},
+                )
+
+                self.assertFalse(form.is_valid())
+                self.assertIn("формате JPEG или PNG", form.errors["poster"][0])
+
+    def test_rejects_posters_larger_than_two_megabytes(self):
+        image = Image.frombytes(
+            "RGB",
+            (1100, 1100),
+            os.urandom(1100 * 1100 * 3),
+        )
+        image_buffer = BytesIO()
+        image.save(image_buffer, format="PNG", compress_level=0)
+        image_content = image_buffer.getvalue()
+        self.assertGreater(len(image_content), MAX_POSTER_SIZE)
+        upload = SimpleUploadedFile(
+            "poster.png",
+            image_content,
+            content_type="image/png",
+        )
+        form = MovieAdminForm(
+            data=self.form_data(),
+            files={"poster": upload},
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("не должен превышать 2 МБ", form.errors["poster"][0])
 
 
 class RegisterFormTests(SimpleTestCase):

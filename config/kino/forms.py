@@ -1,7 +1,51 @@
+from pathlib import Path
+
 from django import forms
-from django.contrib.auth.models import User
 from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm
-from .models import Review
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import UploadedFile
+
+from .models import Movie, Review
+
+
+MAX_POSTER_SIZE = 2 * 1024 * 1024
+
+
+class PosterImageField(forms.ImageField):
+    allowed_extensions = {
+        "JPEG": {".jpg", ".jpeg"},
+        "PNG": {".png"},
+    }
+
+    def to_python(self, data):
+        if isinstance(data, UploadedFile) and data.size > MAX_POSTER_SIZE:
+            raise ValidationError("Размер постера не должен превышать 2 МБ.")
+
+        image = super().to_python(data)
+        if not isinstance(data, UploadedFile) or image is None:
+            return image
+
+        image_format = getattr(image.image, "format", None)
+        extension = Path(image.name).suffix.lower()
+        if (
+            image_format not in self.allowed_extensions
+            or extension not in self.allowed_extensions.get(image_format, set())
+        ):
+            raise ValidationError("Постер должен быть в формате JPEG или PNG.")
+        return image
+
+
+class MovieAdminForm(forms.ModelForm):
+    poster = PosterImageField(
+        label="Постер",
+        required=False,
+        help_text="Формат JPEG или PNG, размер — до 2 МБ.",
+    )
+
+    class Meta:
+        model = Movie
+        fields = "__all__"
 
 
 # Форма регистрации нового пользователя
